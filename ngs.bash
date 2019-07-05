@@ -6,7 +6,7 @@
 
 echo "Parsing arguments"
 
-MOVE=true
+NOMOVE=false
 KEEP=false
 BACTERIA=true
 PHAGE=true
@@ -21,7 +21,7 @@ while [[ -n "$1" ]]; do
             KEEP=true
             ;;
         --nomove)
-            MOVE=false
+            NOMOVE=true
             ;;
         --bacteria)
             PHAGE=false
