@@ -13,7 +13,7 @@ PHAGE=true
 TEST=""
 
 while [[ -n "$1" ]]; do
-    case "$i" in
+    case "$1" in
         --test)
             TEST="--dry-run"
             ;;
@@ -47,12 +47,17 @@ while [[ -n "$1" ]]; do
             if [[ -z "$SOURCE1" ]]; then
                 SOURCE1="$1"
             else
-                SOURCE2="$2"
+                SOURCE2="$1"
             fi
             ;;
     esac
     shift
 done
+
+if [[ -z "$SOURCE1" ]] || [[ -z "$SOURCE2" ]]; then
+    >&2 echo "Have not set both source files, exiting"
+    exit 1
+fi
 
 echo "Arguments parsed:"
 echo "SOURCE1 files: $SOURCE1"
@@ -62,39 +67,64 @@ echo "SOURCE2 files: $SOURCE2"
 # CHECKING DEPENDENCIES #
 #########################
 
+program_missing () {
+    $program=$1
+    >&2 echo "$program not installed"
+    >&2 echo "You can install with:"
+    >&2 echo "conda -c bioconda install ${program%.*}"
+    >&2 echo "or:"
+    >&2 echo "brew install ${program%.*}"
+    >&2 echo "Provided that one of these package managers are installed."
+    exit 1
+}
+
 >&2 echo "Checking dependencies."
 if [[ ! `command -v SOAPnuke` ]]; then
     >&2 echo "SOAPnuke not installed"
     >&2 echo "Download SOAPnuke from github and compile and add the executable to your \$PATH"
+    exit 1
 fi
 for program in fastp spades.py parallel; do
     if [[ ! `command -v $program` ]]; then
-        >&2 echo "$program not installed"
-        >&2 echo "You can install with:"
-        >&2 echo "conda -c bioconda install ${program%.*}"
-        >&2 echo "or:"
-        >&2 echo "brew install ${program%.*}"
-        >&2 echo "Provided that one of these package managers are installed."
+        program_missing $program
     fi
 done
 if [[ $PHAGE == "true" ]] && [[ ! `command -v seqtk` ]]; then
-    >&2 echo "seqtk not installed"
-    >&2 echo "You can install with:"
-    >&2 echo "conda -c bioconda install seqtk"
-    >&2 echo "or:"
-    >&2 echo "brew install seqtk"
-    >&2 echo "Provided that one of these package managers are installed."
+    program_missing $program
 fi
 
+echo "Dependencies met."
 
-###############################
-# GNU Parallel helper strings #
-###############################
+#########################################
+# GNU Parallel helper functions/strings #
+#########################################
 
-CALCFREEPROC="ps -eo pcpu | awk -v P=`nproc` 'NR!=1{S+=\$1}END{printf \"%.2f\",P-S/100}'"
-CALCFREEMEM="free --giga --total | tail -1 | awk '{print \$4}'"
-RECOMFREEMEM="printf '%.f' \$(( \$($CALCFREEMEM) / \$($CALCFREEPROC)))"
-PARALLEL="parallel $TEST -j \$($CALCFREEPROC) --memfree \$($RECOMFREEMEM)"
+# I am not writing a full blown load manager,
+# but GNU Parallel can do its best.
+CALCFREEPROC () {
+    # Calculate the amount of free processing powers left (in # of processors)
+    ps -eo pcpu | awk -v P=`nproc` 'NR!=1{S+=$1}END{printf "%.2f",P-S/100}'
+}
+CALCFREEPROCABS () {
+    # report the integer value of the amount of processort available.
+    printf '%.f' $(CALCFREEPROC)
+}
+CALCFREEMEM () {
+    # Calculate the amount of RAM left (in GB)
+    free --giga | awk 'NR==2{print $NF}'
+}
+RECOMFREEMEM () {
+    # For each processor there should be the same amount of RAM.
+    bc -l <<<"$(CALCFREEMEM) / $(CALCFREEPROC)"
+}
+# $TEST can be the --dry-run option.
+PARALLEL () {
+    parallel $TEST -j $(CALCFREEPROCABS) --memfree $(RECOMFREEMEM) --load 100% $*
+}
+
+# I can insert some Perl inside GNU Parallel,
+# that's what these are doing:
+# (No bioinformatics project is complete without some unreadable Perl.)
 COMMONPREFIX='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*[^_-]).*\0.*/\1`;$_=$1;'
 COMMONPREFIXWITHDIR='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*/.*[^_-]).*\0.*/\1`;$_=$1;s:/:_:'
 
@@ -191,7 +221,7 @@ else
 fi
 
 # Now we can run fastp in parallel
-$PARALLEL --rpl $COMMONPREFIXRAW --rpl $TARGET \
+PARALLEL --rpl $COMMONPREFIXRAW --rpl $TARGET \
     fastp -i {1} -o fastp/{1t} -I {2} -O fastp/{2t} \
     -5 -3 --correction -qualified_quality_phred 20 --lenght_required 30 \
     -j json/{1cp}.json -h html/{1cp}.html --report_title {1cp} \
@@ -200,7 +230,7 @@ $PARALLEL --rpl $COMMONPREFIXRAW --rpl $TARGET \
 echo "Finished fastp"
 echo "Making pdf about quality."
 mkdir -p pdf
-$PARALLEL wkhtmltopdf {} pdf/{/.} ::: html/*
+PARALLEL wkhtmltopdf {} pdf/{/.} ::: html/*
 
 if [[ $MOVED == "true" ]] && [[ $KEEP == "false" ]]; then
     echo "Removing raw"
@@ -210,7 +240,7 @@ fi
 echo "Starting SOAPNuke"
 
 mkdir -p soapnuke
-$PARALLEL --rpl $COMMONPREFIX \
+PARALLEL --rpl $COMMONPREFIX \
     SOAPnuke filter -1 {1} -2 {2} \
     -C {1/} -D {2/} -o soapnuke/{1cp} \
     ::: fastp/$BASESOURCE1 :::+ fastp/$BASESOURCE2
@@ -223,7 +253,7 @@ fi
 if [[ $PHAGE == "true" ]]; then
     echo "Starting seqtk for phage analysis."
     mkdir -p seqtk
-    $PARALLEL seqtk sample {} 25000 ">" seqtk/{/.} ::: soapnuke/*/*.fq.gz
+    PARALLEL seqtk sample {} 25000 ">" seqtk/{/.} ::: soapnuke/*/*.fq.gz
     if [[ $BACTERIA == "false" ]] && [[ $KEEP == "false" ]]; then
         echo "Removing SOAPnuke files"
         rm -rf soapnuke
@@ -235,7 +265,7 @@ echo "Assembly"
 if [[ $PHAGE == "true" ]]; then
     echo "Running spades.py for phages."
     mkdir -p spades_phage
-    $PARALLEL --rpl $COMMONPREFIX \
+    PARALLEL --rpl $COMMONPREFIX \
         mkdir -p spades_phage/{1cp} "&&" \
         spades.py -1 {1} -2 {2} --carefull -o spades_phage/{1cp} \
         ::: seqtk/$BASESOURCE1 :::+ seqtk/$BASESOURCE2
@@ -248,7 +278,7 @@ fi
 if [[ $BACTERIA == "true" ]]; then
     echo "Running spades.py for bacteria."
     mkdir -p spades_bac
-    $PARALLEL --rpl $COMMONPREFIX \
+    PARALLEL --rpl $COMMONPREFIX \
         mkdir -p spades_bac/{1cp} "&&" \
         spades.py -1 {1} -2 {2} --carefull -o spades_bac/{1cp} \
         ::: soapnuke/*/$BASESOURCE1 :::+ soapnuke/*/$BASESOURCE2
