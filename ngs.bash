@@ -78,7 +78,7 @@ program_missing () {
     exit 1
 }
 
->&2 echo "Checking dependencies."
+echo "Checking dependencies."
 if [[ ! `command -v SOAPnuke` ]]; then
     >&2 echo "SOAPnuke not installed"
     >&2 echo "Download SOAPnuke from github and compile and add the executable to your \$PATH"
