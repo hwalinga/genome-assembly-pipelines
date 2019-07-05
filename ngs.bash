@@ -8,7 +8,7 @@
 # two globs for 1 and 2, (positional)
 #
 #
-# check deps (SOAPNuke, seqtk, fastp, spades.py)
+# check deps (SOAPNuke, seqtk, fastp, spades.py, parallel)
 #
 # check if on a remote (prefer move)
 # check if filenames have uniqueness
@@ -21,9 +21,25 @@
 # NOMOVE
 # TYPE
 
-CALCFREEMEM="free --giga --total | tail -1 | awk '{print $4}'"
-CALCFREEPROC="ps -eo pcpu | awk -v P=`nproc` 'NR!=1{S+=$1}END{printf \"%.2f\",P-S/100}'"
-PARALLEL="parallel --dry-run"
+echo "Checking dependencies."
+if [[ ! `command -v SOAPnuke` ]]; then
+    echo "SOAPnuke not installed"
+    echo "Download SOAPnuke from github and compile and add the executable to your \$PATH"
+for program in seqtk fastp spades.py parallel; do
+    if [[ ! `command -v $program` ]]; then
+        echo "$program not installed"
+        echo "You can install with:"
+        echo "conda -c bioconda install ${program%.*}"
+        echo "or:"
+        echo "brew install ${program%.*}"
+        echo "Provided that one of these package managers are installed."
+    fi
+done
+
+CALCFREEPROC="ps -eo pcpu | awk -v P=`nproc` 'NR!=1{S+=\$1}END{printf \"%.2f\",P-S/100}'"
+CALCFREEMEM="free --giga --total | tail -1 | awk '{print \$4}'"
+RECOMFREEMEM="printf '%.f' \$(( \$($CALCFREEMEM) / \$($CALCFREEPROC)))"
+PARALLEL="parallel $TEST -j \$($CALCFREEPROC) --memfree \$($RECOMFREEMEM)"
 COMMONPREFIX='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*[^_-]).*\0.*/\1`;$_=$1;'
 COMMONPREFIXWITHDIR='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*/.*[^_-]).*\0.*/\1`;$_=$1;'
 
@@ -159,6 +175,8 @@ if [[ $PHAGE == "true" ]]; then
     fi
 fi
 
+echo "Assembly"
+
 if [[ $PHAGE == "true" ]]; then
     echo "Running spades.py for phages."
     mkdir -p spades_phage
@@ -184,3 +202,5 @@ if [[ $BACTERIA == "true" ]]; then
         rm -rf soapnuke
     fi
 fi
+
+echo "Done"
