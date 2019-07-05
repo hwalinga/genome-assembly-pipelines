@@ -1,58 +1,89 @@
 #!/bin/bash
 
-# parse arguments
-#
-# move to local preference (--nomove)
-# keep for easy resume (--keep)
-# --bacteria or --phage, or --both (last one applies).
-# two globs for 1 and 2, (positional)
-#
-#
-# check deps (SOAPNuke, seqtk, fastp, spades.py, parallel)
-#
-# check if on a remote (prefer move)
-# check if filenames have uniqueness
-#
-# run parallel
-
-# SOURCE1
-# TEST (--dry-run or "")
-# SOURCE2
-# NOMOVE
-# TYPE ($BACTERIA, $PHAGE)
-
 ###################
 # PARSE ARGUMENTS #
 ###################
 
-MOVE=
+echo "Parsing arguments"
+
+MOVE=true
+KEEP=false
+BACTERIA=true
+PHAGE=true
+TEST=""
+
+while [[ -n "$1" ]]; do
+    case "$i" in
+        --test)
+            TEST="--dry-run"
+            ;;
+        --keep)
+            KEEP=true
+            ;;
+        --nomove)
+            MOVE=false
+            ;;
+        --bacteria)
+            PHAGE=false
+            BACTERIA=true
+            ;;
+        --phage)
+            PHAGE=true
+            BACTERIA=false
+            ;;
+        --both)
+            PHAGE=true
+            BACTERIA=true
+            ;;
+        --)
+            SOURCE1="$2"
+            SOURCE2="$3"
+            break
+            ;;
+        -*)
+            >&2 echo "Unrecognized option ($1), but we are moving on."
+            ;;
+        *)
+            if [[ -z "$SOURCE1" ]]; then
+                SOURCE1="$1"
+            else
+                SOURCE2="$2"
+            fi
+            ;;
+    esac
+    shift
+done
+
+echo "Arguments parsed:"
+echo "SOURCE1 files: $SOURCE1"
+echo "SOURCE2 files: $SOURCE2"
 
 #########################
 # CHECKING DEPENDENCIES #
 #########################
 
-echo "Checking dependencies."
+>&2 echo "Checking dependencies."
 if [[ ! `command -v SOAPnuke` ]]; then
-    echo "SOAPnuke not installed"
-    echo "Download SOAPnuke from github and compile and add the executable to your \$PATH"
+    >&2 echo "SOAPnuke not installed"
+    >&2 echo "Download SOAPnuke from github and compile and add the executable to your \$PATH"
 fi
 for program in fastp spades.py parallel; do
     if [[ ! `command -v $program` ]]; then
-        echo "$program not installed"
-        echo "You can install with:"
-        echo "conda -c bioconda install ${program%.*}"
-        echo "or:"
-        echo "brew install ${program%.*}"
-        echo "Provided that one of these package managers are installed."
+        >&2 echo "$program not installed"
+        >&2 echo "You can install with:"
+        >&2 echo "conda -c bioconda install ${program%.*}"
+        >&2 echo "or:"
+        >&2 echo "brew install ${program%.*}"
+        >&2 echo "Provided that one of these package managers are installed."
     fi
 done
 if [[ $PHAGE == "true" ]] && [[ ! `command -v seqtk` ]]; then
-    echo "seqtk not installed"
-    echo "You can install with:"
-    echo "conda -c bioconda install seqtk"
-    echo "or:"
-    echo "brew install seqtk"
-    echo "Provided that one of these package managers are installed."
+    >&2 echo "seqtk not installed"
+    >&2 echo "You can install with:"
+    >&2 echo "conda -c bioconda install seqtk"
+    >&2 echo "or:"
+    >&2 echo "brew install seqtk"
+    >&2 echo "Provided that one of these package managers are installed."
 fi
 
 
