@@ -125,6 +125,8 @@ PARALLEL () {
 # I can insert some Perl inside GNU Parallel,
 # that's what these are doing:
 # (No bioinformatics project is complete without some unreadable Perl.)
+# What is found here is the common prefix of two files
+# having the paired end reads.
 COMMONPREFIX='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*[^_-]).*\0.*/\1`;$_=$1;'
 COMMONPREFIXWITHDIR='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*/.*[^_-]).*\0.*/\1`;$_=$1;s:/:_:'
 
