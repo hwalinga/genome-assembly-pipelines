@@ -19,13 +19,24 @@
 # TEST (--dry-run or "")
 # SOURCE2
 # NOMOVE
-# TYPE
+# TYPE ($BACTERIA, $PHAGE)
+
+###################
+# PARSE ARGUMENTS #
+###################
+
+MOVE=
+
+#########################
+# CHECKING DEPENDENCIES #
+#########################
 
 echo "Checking dependencies."
 if [[ ! `command -v SOAPnuke` ]]; then
     echo "SOAPnuke not installed"
     echo "Download SOAPnuke from github and compile and add the executable to your \$PATH"
-for program in seqtk fastp spades.py parallel; do
+fi
+for program in fastp spades.py parallel; do
     if [[ ! `command -v $program` ]]; then
         echo "$program not installed"
         echo "You can install with:"
@@ -35,13 +46,26 @@ for program in seqtk fastp spades.py parallel; do
         echo "Provided that one of these package managers are installed."
     fi
 done
+if [[ $PHAGE == "true" ]] && [[ ! `command -v seqtk` ]]; then
+    echo "seqtk not installed"
+    echo "You can install with:"
+    echo "conda -c bioconda install seqtk"
+    echo "or:"
+    echo "brew install seqtk"
+    echo "Provided that one of these package managers are installed."
+fi
+
+
+###############################
+# GNU Parallel helper strings #
+###############################
 
 CALCFREEPROC="ps -eo pcpu | awk -v P=`nproc` 'NR!=1{S+=\$1}END{printf \"%.2f\",P-S/100}'"
 CALCFREEMEM="free --giga --total | tail -1 | awk '{print \$4}'"
 RECOMFREEMEM="printf '%.f' \$(( \$($CALCFREEMEM) / \$($CALCFREEPROC)))"
 PARALLEL="parallel $TEST -j \$($CALCFREEPROC) --memfree \$($RECOMFREEMEM)"
 COMMONPREFIX='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*[^_-]).*\0.*/\1`;$_=$1;'
-COMMONPREFIXWITHDIR='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*/.*[^_-]).*\0.*/\1`;$_=$1;'
+COMMONPREFIXWITHDIR='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*/.*[^_-]).*\0.*/\1`;$_=$1;s:/:_:'
 
 #################
 # PERFORM CHECK #
@@ -204,3 +228,4 @@ if [[ $BACTERIA == "true" ]]; then
 fi
 
 echo "Done"
+exit 0
