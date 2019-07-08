@@ -6,8 +6,9 @@
 
 HELP=$(cat << 'EOF'
 Usage:
+$0 [--options] "SOURCE1" "SOURCE2"
 --test:
-    Show commands to run
+    Show commands to run, but not execute them.
 --nomove:
     If source files are on a different parition than the current directory,
     they will first will be moved to this partition.
@@ -20,7 +21,10 @@ Usage:
 --bacteria,--phage,--both:
     Set one of this option if you have bacteria or phage DNA.
     In this case the difference with a phage assembly is that it samples the
-    data, so that the assembly is faster. There isn't any
+    data, so that the assembly is faster. There isn't any difference further
+    at the moment.
+--nocov:
+    Do not plot the coverage plots.
 EOF
 )
 
@@ -31,7 +35,7 @@ KEEP=false
 BACTERIA=true
 PHAGE=true
 TEST=""
-COVERAGE=false
+COVERAGE=true
 
 while [[ -n "$1" ]]; do
     case "$1" in
@@ -56,8 +60,14 @@ while [[ -n "$1" ]]; do
             PHAGE=true
             BACTERIA=true
             ;;
-        --coverage)
-            COVERAGE=true
+        --nocov)
+            COVERAGE=false
+            ;;
+        -h|--help)
+            >&2 echo "Printing help:"
+            echo $HELP
+            >&2 echo "Exiting"
+            exit 1
             ;;
         --)
             SOURCE1="$2"
@@ -65,7 +75,9 @@ while [[ -n "$1" ]]; do
             break
             ;;
         -*)
-            >&2 echo "Unrecognized option ($1), but we are moving on."
+            >&2 echo "Unrecognized option"
+            >&2 echo "Exiting."
+            exit 1
             ;;
         *)
             if [[ -z "$SOURCE1" ]]; then
@@ -90,6 +102,15 @@ fi
 echo "Arguments parsed:"
 echo "SOURCE1 files: $SOURCE1"
 echo "SOURCE2 files: $SOURCE2"
+if [[ $COVERAGE == "true" ]]; then
+    echo "Run with making coverage plots."
+fi
+if [[ $TEST == "--dry-run" ]]; then
+    echo "Only output what commands are run (dry run)."
+fi
+if [[ $KEEP == "true" ]]; then
+    echo "Keep inbetween results."
+fi
 
 #########################
 # CHECKING DEPENDENCIES #
@@ -102,37 +123,53 @@ program_missing () {
     >&2 echo "conda -c bioconda install ${program%.*}"
     >&2 echo "or:"
     >&2 echo "brew install ${program%.*}"
-    >&2 echo "Provided that one of these package managers are installed."
-    exit 1
+    >&2 echo "Provided that one of these package managers is installed."
 }
 
 echo "Checking dependencies."
 if [[ ! `command -v SOAPnuke` ]]; then
     >&2 echo "SOAPnuke not installed"
     >&2 echo "Download SOAPnuke from github and compile and add the executable to your \$PATH"
+    >&2 echo "Exiting"
     exit 1
 fi
+echo "Checking dependencies for assembly."
 for program in fastp spades.py parallel; do
     if [[ ! `command -v $program` ]]; then
         program_missing $program
+        >&2 echo "Exiting"
+        exit 1
+
     fi
 done
 if [[ $PHAGE == "true" ]] && [[ ! `command -v seqtk` ]]; then
     >&2 echo "Need seqtk for downsampling data."
     >&2 echo "There is not a strict requirement for this,"
     >&2 echo "So you can also assemble as if you assemble bacteria."
+    >&2 echo ""
     program_missing $program
+    >&2 echo "Exiting"
+    exit 1
 fi
 if [[ $COVERAGE == "true" ]]; then
-    echo "Checking "
-
-    for program in fastp spades.py parallel; do
+    echo "Checking dependencies for coverage plots."
+    echo "If these dependencies fail, you can still assemble with the --nocov option."
+    for program in samtools gnuplot; do
         if [[ ! `command -v $program` ]]; then
             program_missing $program
+            >&2 echo "Exiting"
+            exit 1
         fi
     done
-
-
+    if [[ ! `samtools --version` ]]; then
+        >&2 echo "You have installed an too old version for samtools"
+        >&2 echo "Please install the version above 1.0"
+        >&2 echo "If you do not ask for coverage plots with the --nocov option,"
+        >&2 echo "you can still assemble."
+        >&2 echo "Exiting"
+        exit 1
+    fi
+fi
 
 echo "Dependencies met."
 
@@ -160,14 +197,16 @@ RECOMFREEMEM () {
 }
 # $TEST can be the --dry-run option.
 PARALLEL () {
-    parallel $TEST -j $(CALCFREEPROCABS) --memfree $(RECOMFREEMEM) --load 100% $*
+    parallel $TEST -j $(CALCFREEPROCABS) --memfree $(RECOMFREEMEM) --load 100% "$@"
 }
 
 # I can insert some Perl inside GNU Parallel,
 # that's what these are doing:
 # (No bioinformatics project is complete without some unreadable Perl.)
 # What is found here is the common prefix of two files
-# having the paired end reads.
+# that are having the paired end reads.
+# The second line will find the common prefix including the first directory,
+# replacing the directory seperator (/) with an underscore (_).
 COMMONPREFIX='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*[^_-]).*\0.*/\1`;$_=$1;'
 COMMONPREFIXWITHDIR='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*/.*[^_-]).*\0.*/\1`;$_=$1;s:/:_:'
 
@@ -178,10 +217,12 @@ COMMONPREFIXWITHDIR='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*/.*[^_-]).*\0.*/\1`;$_=$1
 # Check if glob pattern expands.
 if [[ `stat -t $SOURCE1` ]]; then
     >&2 echo "Glob pattern of first files not found ($SOURCE1)."
+    >&2 echo "Exiting"
     exit 1
 fi
 if [[ `stat -t $SOURCE2` ]]; then
     >&2 echo "Glob pattern of second files not found ($SOURCE2)."
+    >&2 echo "Exiting"
     exit 1
 fi
 
@@ -191,6 +232,7 @@ if [[ `ls $SOURCE1 $SOURCE2 | sed 's:.*/::' | sort | uniq -D` ]]; then
     # not unique, maybe if we add one directory more.
     if [[ `ls $SOURCE1 $SOURCE2 | perl -pe 's:.*/(?=.*/)::' | sort | uniq -D` ]]; then
         >&2 echo "Files found (including first directory) are not unique to each other"
+        >&2 echo "Exiting"
         exit 1
     fi
     WITHDIRECTORY=true
@@ -200,16 +242,18 @@ fi
 if [[ $WITHDIRECTORY == "false" ]]; then
     if [[ ! $(parallel --rpl $COMMONPREFIX echo {1cp} ::: $SOURCE1 :::+ $SOURCE2) ]]; then
         >&2 echo "There is no common substring between the two lists of sources files"
+        >&2 echo "Exiting"
         exit 1
     fi
 else
     if [[ ! $(parallel --rpl $COMMONPREFIXWITHDIR echo {1cp} ::: $SOURCE1 :::+ $SOURCE2) ]]; then
         >&2 echo "There is no common substring between the two lists of the source files."
+        >&2 echo "Exiting"
         exit 1
     fi
 fi
 
-echo Checks done.
+echo "Checks done."
 
 # Check if source files are on a different disk, if so,
 # it is better to move them to a folder on the local first,
@@ -271,7 +315,7 @@ PARALLEL --rpl $COMMONPREFIXRAW --rpl $TARGET \
     ::: $RAWSOURCE1 :::+ $RAWSOURCE2
 
 echo "Finished fastp"
-echo "Making pdf about quality."
+echo "Making pdf about quality, this is the same as the HTML, just not interactive."
 mkdir -p pdf
 PARALLEL wkhtmltopdf {} pdf/{/.} ::: html/*
 
@@ -289,7 +333,7 @@ PARALLEL --rpl $COMMONPREFIX \
     ::: fastp/$BASESOURCE1 :::+ fastp/$BASESOURCE2
 
 if [[ $KEEP == "false" ]]; then
-    echo "Removing fastp (not the quality output)"
+    echo "Removing fastp (not the quality output)."
     rm -rf fastp
 fi
 
