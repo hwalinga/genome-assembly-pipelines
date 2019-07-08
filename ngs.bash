@@ -36,6 +36,7 @@ BACTERIA=true
 PHAGE=true
 TEST=""
 COVERAGE=true
+PDF=true
 
 while [[ -n "$1" ]]; do
     case "$1" in
@@ -127,13 +128,29 @@ program_missing () {
 }
 
 echo "Checking dependencies."
+echo "Checking core dependencies."
+for program in free ps printf awk perl sed; do
+    if [[ ! `command -v $program` ]]; then
+        >&2 echo "$program not installed."
+        >&2 echo "This is a core OS program."
+        >&2 echo "You should ask you sysadmin to install this."
+        >&2 echo "Exiting"
+        exit 1
+    fi
+done
+if [[ ! `command -v wkhtmltopdf` ]]; then
+    >&2 echo "wkhtmltopdf not installed."
+    >&2 echo "Really not a problem, only used for html to pdf conversion."
+    >&2 echo "You can just open the html instead."
+    PDF=false
+fi
+echo "Checking dependencies for assembly."
 if [[ ! `command -v SOAPnuke` ]]; then
     >&2 echo "SOAPnuke not installed"
     >&2 echo "Download SOAPnuke from github and compile and add the executable to your \$PATH"
     >&2 echo "Exiting"
     exit 1
 fi
-echo "Checking dependencies for assembly."
 for program in fastp spades.py parallel; do
     if [[ ! `command -v $program` ]]; then
         program_missing $program
@@ -154,7 +171,7 @@ fi
 if [[ $COVERAGE == "true" ]]; then
     echo "Checking dependencies for coverage plots."
     echo "If these dependencies fail, you can still assemble with the --nocov option."
-    for program in samtools gnuplot; do
+    for program in samtools gnuplot minimap2; do
         if [[ ! `command -v $program` ]]; then
             program_missing $program
             >&2 echo "Exiting"
@@ -162,8 +179,9 @@ if [[ $COVERAGE == "true" ]]; then
         fi
     done
     if [[ ! `samtools --version` ]]; then
-        >&2 echo "You have installed an too old version for samtools"
-        >&2 echo "Please install the version above 1.0"
+        >&2 echo "You have installed an too old version for samtools."
+        >&2 echo "Please install the version above 1.0."
+        >&2 echo "This program is only needed for the coverage plots."
         >&2 echo "If you do not ask for coverage plots with the --nocov option,"
         >&2 echo "you can still assemble."
         >&2 echo "Exiting"
@@ -197,10 +215,14 @@ RECOMFREEMEM () {
 }
 # $TEST can be the --dry-run option.
 PARALLEL () {
+    # PARALLEL (as the/this function) should work equivalent as parallel (as the command)
+    # Calculating free processors and free memory at call time.
+    # However, I am not a 100 % percent sure, as using parallel often encounters
+    # complicated quoting rules, and I don't know if bash correctly solves them like this.
     parallel $TEST -j $(CALCFREEPROCABS) --memfree $(RECOMFREEMEM) --load 100% "$@"
 }
 
-# I can insert some Perl inside GNU Parallel,
+# I can inject some Perl inside GNU Parallel,
 # that's what these are doing:
 # (No bioinformatics project is complete without some unreadable Perl.)
 # What is found here is the common prefix of two files
@@ -209,6 +231,10 @@ PARALLEL () {
 # replacing the directory seperator (/) with an underscore (_).
 COMMONPREFIX='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*[^_-]).*\0.*/\1`;$_=$1;'
 COMMONPREFIXWITHDIR='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*/.*[^_-]).*\0.*/\1`;$_=$1;s:/:_:'
+# Define common prefix if first directory is needed:
+WITHDIRECTORYREGEX='s:.*/(.*)/(.*):\1_\2:'
+# Perl regex to find the first directory:
+FIRSTDIRECTORY='{m} s:*?/::;s:/.*::;'
 
 #################
 # PERFORM CHECK #
@@ -267,10 +293,10 @@ if [[ $NOMOVE == "false" ]] && [[ `stat --printf '%d' $(echo $SOURCE1 | head -1)
         echo "Moving files"
         for i in $SOURCE1 $SOURCE2; do
             echo "Moving file $i"
-            cp $i raw/$(perl -pe 's:.*/(.*)/(.*):\1_\2:'<<<$i)
+            cp $i raw/$(perl -pe $WITHDIRECTORYREGEX<<<$i)
         done
-        BASESOURCE1=$(perl -pe 's:.*/(.*)/(.*):\1_\2:'<<<"$SOURCE1")
-        BASESOURCE2=$(perl -pe 's:.*/(.*)/(.*):\1_\2:'<<<"$SOURCE2")
+        BASESOURCE1=$(perl -pe $WITHDIRECTORYREGEX<<<"$SOURCE1")
+        BASESOURCE2=$(perl -pe $WITHDIRECTORYREGEX<<<"$SOURCE2")
         echo "Moving done"
     else
         echo "Moving first files"
@@ -301,7 +327,7 @@ fi
 
 if [[ $WITHDIRECTORY == "true" ]]; then
     COMMONPREFIXRAW=$COMMONPREFIXWITHDIR
-    TARGET='{t} s:.*/(.*)/(.*):\1_\2:'
+    TARGET="{t} $WITHDIRECTORYREGEX"
 else
     COMMONPREFIXRAW=$COMMONPREFIX
     TARGET='{t} s:.*/::'
@@ -315,9 +341,11 @@ PARALLEL --rpl $COMMONPREFIXRAW --rpl $TARGET \
     ::: $RAWSOURCE1 :::+ $RAWSOURCE2
 
 echo "Finished fastp"
-echo "Making pdf about quality, this is the same as the HTML, just not interactive."
-mkdir -p pdf
-PARALLEL wkhtmltopdf {} pdf/{/.} ::: html/*
+if [[ $PDF == "true" ]]; then
+    echo "Making pdf about quality, this is the same as the HTML, just not interactive."
+    mkdir -p pdf
+    PARALLEL wkhtmltopdf {} pdf/{/.} ::: html/*
+fi
 
 if [[ $MOVED == "true" ]] && [[ $KEEP == "false" ]]; then
     echo "Removing raw"
@@ -348,31 +376,91 @@ if [[ $PHAGE == "true" ]]; then
 fi
 
 echo "Assembly"
+phage_suffix="_phage"
+bac_suffix="_bac"
 
+targets=""
+if [[ $BACTERIA == "true" ]]; then
+    targets+=" $bac_suffix"
+fi
 if [[ $PHAGE == "true" ]]; then
-    echo "Running spades.py for phages."
-    mkdir -p spades_phage
+    targets+=" $phage_suffix"
+fi
+for t in $targets; do
+
+    if [[ $t == $phage_suffix ]]; then
+        # phage corrected raw sources
+        corrawsource1=seqtk/$BASESOURCE1
+        corrawsource2=seqtk/$BASESOURCE2
+    else
+        # bacteria corrected raw sources
+        corrawsource1=soapnuke/*/$BASESOURCE1.gz
+        corrawsource2=soapnuke/*/$BASESOURCE2.gz
+    fi
+
+    echo "Running spades.py for $1."
+    mkdir -p spades$t
     PARALLEL --rpl $COMMONPREFIX \
         mkdir -p spades_phage/{1cp} "&&" \
         spades.py -1 {1} -2 {2} --carefull -o spades_phage/{1cp} \
-        ::: seqtk/$BASESOURCE1 :::+ seqtk/$BASESOURCE2
-    if [[ $KEEP == "false" ]]; then
-        echo "Removing seqtk files"
-        rm -rf seqtk
-    fi
-fi
+        ::: $corrawsource1 :::+ $corrawsource2
 
-if [[ $BACTERIA == "true" ]]; then
-    echo "Running spades.py for bacteria."
-    mkdir -p spades_bac
-    PARALLEL --rpl $COMMONPREFIX \
-        mkdir -p spades_bac/{1cp} "&&" \
-        spades.py -1 {1} -2 {2} --carefull -o spades_bac/{1cp} \
-        ::: soapnuke/*/$BASESOURCE1 :::+ soapnuke/*/$BASESOURCE2
-    if [[ $KEEP == "false" ]]; then
-        echo "Removing SOAPnuke files"
-        rm -rf soapnuke
+    if [[ $COVERAGE == "false" ]]; then
+        if [[ $t == $phage_suffix ]]; then
+            echo "Removing seqtk files (for phage assembly)"
+            rm -rf seqtk
+        else
+            echo "Removing SOAPnuke files (for bacteria assembly)"
+            rm -rf soapnuke
+        fi
     fi
+done
+
+# Coverage plots.
+if [[ $COVERAGE == "true" ]]; then
+    echo "Making assembly plots."
+    targets=""
+    if [[ $BACTERIA == "true" ]]; then
+        targets+=" $bac_suffix"
+    fi
+    if [[ $PHAGE == "true" ]]; then
+        targets+=" $phage_suffix"
+    fi
+    for t in $targets; do
+
+        if [[ $t == $phage_suffix ]]; then
+            # phage corrected raw sources
+            corrawsource1=seqtk/$BASESOURCE1
+            corrawsource2=seqtk/$BASESOURCE2
+        else
+            # bacteria corrected raw sources
+            corrawsource1=soapnuke/*/$BASESOURCE1.gz
+            corrawsource2=soapnuke/*/$BASESOURCE2.gz
+        fi
+
+        echo "Working on $t"
+        mkdir -p {mapped,stats,figs}$t
+
+        echo "Mapping to raw reads."
+        PARALLEL --rpl $FIRSTDIRECTORY \
+            minimap2 -ax sr {1} {2} {3} "|" \
+            awk -F\\t -v OFS=\\t "'{\$1=substr(\$1,1,251)}1'" \
+            ">" mapped$t/{1m}.sam \
+            ::: spades/*/contigs.fasta :::+ $corrawsource1 :::+ $corrawsource2
+
+        echo "Sorting and indexing of sam files."
+        PARALLEL --plus 'samtools sort {} > {.}.bam && samtools index {.}.bam' \
+            ::: mapped$t/*.sam
+
+        echo "Calculating depth."
+        parallel --dry-run mkdir -p stats$t/{/.} ::: mapped$t/*.sam | sh
+        PARALLEL 'samtools depth -a {} | awk "{print $3 > \"stats'$t'/{\.}/\"\$1}"' \
+            ::: mapped$t/*.bam
+
+        echo "Plotting coverage depth."
+        parallel -q --dry-run --rpl '{m} s:.*?/::;s:/.*::;' gnuplot -e "set term png; set output 'figs/{m}_{/}'; set title '{m}-{/}' noenhanced; set xlabel 'bp'; set ylabel 'coverage'; unset key; stats '{}' nooutput; plot [:STATS_records] '{}' with dots;" ::: stats/*/*
+
+    done
 fi
 
 echo "Done"
