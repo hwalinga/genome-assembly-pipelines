@@ -4,6 +4,26 @@
 # PARSE ARGUMENTS #
 ###################
 
+HELP=$(cat << 'EOF'
+Usage:
+--test:
+    Show commands to run
+--nomove:
+    If source files are on a different parition than the current directory,
+    they will first will be moved to this partition.
+    If you have a reliable connection between the two drives, you can disable
+    that default behavior with this flag.
+    (Results still end up on the current directory regardless of this option.)
+--keep:
+    This flag will make sure the inbetween results will be kept.
+    This way you can resume the pipeline when it crashed unexpectedly
+--bacteria,--phage,--both:
+    Set one of this option if you have bacteria or phage DNA.
+    In this case the difference with a phage assembly is that it samples the
+    data, so that the assembly is faster. There isn't any
+EOF
+)
+
 echo "Parsing arguments"
 
 NOMOVE=false
@@ -11,6 +31,7 @@ KEEP=false
 BACTERIA=true
 PHAGE=true
 TEST=""
+COVERAGE=false
 
 while [[ -n "$1" ]]; do
     case "$1" in
@@ -35,6 +56,9 @@ while [[ -n "$1" ]]; do
             PHAGE=true
             BACTERIA=true
             ;;
+        --coverage)
+            COVERAGE=true
+            ;;
         --)
             SOURCE1="$2"
             SOURCE2="$3"
@@ -56,6 +80,10 @@ done
 
 if [[ -z "$SOURCE1" ]] || [[ -z "$SOURCE2" ]]; then
     >&2 echo "Have not set both source files, exiting"
+    echo "source1 is:"
+    echo "$SOURCE1"
+    echo "source2 is:"
+    echo "$SOURCE2"
     exit 1
 fi
 
@@ -90,8 +118,21 @@ for program in fastp spades.py parallel; do
     fi
 done
 if [[ $PHAGE == "true" ]] && [[ ! `command -v seqtk` ]]; then
+    >&2 echo "Need seqtk for downsampling data."
+    >&2 echo "There is not a strict requirement for this,"
+    >&2 echo "So you can also assemble as if you assemble bacteria."
     program_missing $program
 fi
+if [[ $COVERAGE == "true" ]]; then
+    echo "Checking "
+
+    for program in fastp spades.py parallel; do
+        if [[ ! `command -v $program` ]]; then
+            program_missing $program
+        fi
+    done
+
+
 
 echo "Dependencies met."
 
