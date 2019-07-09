@@ -234,7 +234,8 @@ COMMONPREFIXWITHDIR='{cp} "$arg[1]\0$arg[2]"=~m`^.*/(.*/.*[^_-]).*\0.*/\1`;$_=$1
 # Define common prefix if first directory is needed:
 WITHDIRECTORYREGEX='s:.*/(.*)/(.*):\1_\2:'
 # Perl regex to find the first directory:
-FIRSTDIRECTORY='{m} s:*?/::;s:/.*::;'
+# FIRSTDIRECTORY='{m} s:*?/::;s:/.*::;'
+FIRSTDIRECTORY='{m} s:.*/(?=.*/)::;s:/.*::;'
 
 #################
 # PERFORM CHECK #
