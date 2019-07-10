@@ -442,8 +442,13 @@ if [[ $COVERAGE == "true" ]]; then
         echo "Working on $t"
         mkdir -p {mapped,stats,figs}$t
 
+        # If assembly failed, it is easier for the implementation to just
+        # have an empty file instead of no file:
+        touch -a spades/*/contigs.fasta
+
         echo "Mapping to raw reads."
         PARALLEL --rpl $FIRSTDIRECTORY \
+            test -s {1} "&&"
             minimap2 -ax sr {1} {2} {3} "|" \
             awk -F\\t -v OFS=\\t "'{\$1=substr(\$1,1,251)}1'" \
             ">" mapped$t/{1m}.sam \
