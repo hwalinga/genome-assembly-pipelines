@@ -220,7 +220,20 @@ PARALLEL () {
     # Calculating free processors and free memory at call time.
     # However, I am not a 100 % percent sure, as using parallel often encounters
     # complicated quoting rules, and I don't know if bash correctly solves them like this.
-    parallel $TEST -j $(CALCFREEPROCABS) --memfree $(RECOMFREEMEM) --load 100% "$@"
+    #
+    # If the first argument matches -j*, than the number after -j is taken as
+    # the amount of processors.
+    # The free mem is the amount of free memory divided by the amount of
+    # processors.
+    if [[ $1 =~ "-j*" ]]; then
+        PROC=${1#-j*}
+        shift
+    else
+        PROC=$(CALCFREEPROC)
+    fi
+    MEM=$(printf '%.f' $(bc -l <<<"$(CALCFREEMEM) / $PROC"))
+
+    parallel $TEST -j $PROC --memfree $MEM --load 100% "$@"
 }
 
 # I can inject some Perl inside GNU Parallel,
