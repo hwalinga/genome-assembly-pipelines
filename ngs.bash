@@ -202,17 +202,9 @@ CALCFREEPROC () {
     # Calculate the amount of free processing powers left (in # of processors)
     ps -eo pcpu | awk -v P=`nproc` 'NR!=1{S+=$1}END{printf "%.2f",P-S/100}'
 }
-CALCFREEPROCABS () {
-    # report the integer value of the amount of processort available.
-    printf '%.f' $(CALCFREEPROC)
-}
 CALCFREEMEM () {
     # Calculate the amount of RAM left (in GB)
     free --giga | awk 'NR==2{print $NF}'
-}
-RECOMFREEMEM () {
-    # For each processor there should be the same amount of RAM.
-    bc -l <<<"$(CALCFREEMEM) / $(CALCFREEPROC)"
 }
 # $TEST can be the --dry-run option.
 PARALLEL () {
@@ -231,7 +223,8 @@ PARALLEL () {
     else
         PROC=$(CALCFREEPROC)
     fi
-    MEM=$(printf '%.f' $(bc -l <<<"$(CALCFREEMEM) / $PROC"))
+    MEM="$(printf '%.f' $(bc -l <<<"$(CALCFREEMEM) / $PROC"))G"
+    PROC=$(printf '%.f' $PROC)
 
     parallel $TEST -j $PROC --memfree $MEM --load 100% "$@"
 }
