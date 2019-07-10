@@ -37,6 +37,7 @@ PHAGE=true
 TEST=""
 COVERAGE=true
 PDF=true
+ERRORLOG="error.log"
 
 while [[ -n "$1" ]]; do
     case "$1" in
@@ -402,9 +403,21 @@ for t in $targets; do
     echo "Running spades.py for $1."
     mkdir -p spades$t
     PARALLEL --rpl $COMMONPREFIX \
-        mkdir -p spades_phage/{1cp} "&&" \
-        spades.py -1 {1} -2 {2} --carefull -o spades_phage/{1cp} \
+        mkdir -p spades$t/{1cp} "&&" \
+        spades.py -1 {1} -2 {2} --carefull -o spades$t/{1cp} \
         ::: $corrawsource1 :::+ $corrawsource2
+
+    # If assembly failed, it is easier for the implementation to just
+    # have an empty file instead of no file:
+    touch -a spades$t/*/contigs.fasta
+    for ass in spades$t/*/contigs.fasta; do
+        if [[ ! -s $ass ]]; then
+            echo "Seems that the assembly of $ass has failed." |
+                tee -a $ERRORLOG | cat 1>&2
+            echo "Here are the last 40 lines of spades.log" >> $ERRORLOG
+            tail -40 ${ass%/*}/spades.log >> $ERRORLOG
+        fi
+    done
 
     if [[ $COVERAGE == "false" ]]; then
         if [[ $t == $phage_suffix ]]; then
@@ -441,10 +454,6 @@ if [[ $COVERAGE == "true" ]]; then
 
         echo "Working on $t"
         mkdir -p {mapped,stats,figs}$t
-
-        # If assembly failed, it is easier for the implementation to just
-        # have an empty file instead of no file:
-        touch -a spades/*/contigs.fasta
 
         echo "Mapping to raw reads."
         PARALLEL --rpl $FIRSTDIRECTORY \
