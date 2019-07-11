@@ -226,7 +226,7 @@ PARALLEL () {
     MEM="$(printf '%.f' $(bc -l <<<"$(CALCFREEMEM) / $PROC"))G"
     PROC=$(printf '%.f' $PROC)
 
-    parallel $TEST -j $PROC --memfree $MEM --load 100% "$@"
+    parallel $TEST -j $PROC --memfree $MEM --load 100% --delay 30 "$@"
 }
 
 # I can inject some Perl inside GNU Parallel,
@@ -478,9 +478,22 @@ if [[ $COVERAGE == "true" ]]; then
         PARALLEL 'samtools depth -a {} | awk "{print $3 > \"stats'$t'/{\.}/\"\$1}"' \
             ::: mapped$t/*.bam
 
-        echo "Plotting coverage depth."
-        parallel -q --dry-run --rpl '{m} s:.*?/::;s:/.*::;' gnuplot -e "set term png; set output 'figs/{m}_{/}'; set title '{m}-{/}' noenhanced; set xlabel 'bp'; set ylabel 'coverage'; unset key; stats '{}' nooutput; plot [:STATS_records] '{}' with dots;" ::: stats/*/*
+        COVPLOT=$(cat <<-'EOF'
+        set term png;
+        set output 'figs/'.sample.'_'.contig;
+        set title sample.'-'.contig noenhanced;
+        set xlabel 'bp';
+        set ylabel 'coverage';
+        unset key;
+        stats file nooutput;
+        plot [:STATS_records] file with dots;
+EOF
+        )
 
+        echo "Plotting coverage depth."
+        PARALLEL -q --rpl $FIRSTDIRECTORY \
+            gnuplot -e "sample='{m}'; contig='{/}'; file='{}';"$COVPLOT \
+            ::: stats/*/*
     done
 fi
 
