@@ -480,7 +480,7 @@ if [[ $COVERAGE == "true" ]]; then
 
         COVPLOT=$(cat <<-'EOF'
         set term png;
-        set output 'figs/'.sample.'_'.contig;
+        set output figs.''/'.sample.'_'.contig;
         set title sample.'-'.contig noenhanced;
         set xlabel 'bp';
         set ylabel 'coverage';
@@ -492,7 +492,7 @@ EOF
 
         echo "Plotting coverage depth."
         PARALLEL -q --rpl $FIRSTDIRECTORY \
-            gnuplot -e "sample='{m}'; contig='{/}'; file='{}';"$COVPLOT \
+            gnuplot -e "sample='{m}'; contig='{/}'; file='{}'; figs='figs$t'"$COVPLOT \
             ::: stats/*/*
     done
 fi
