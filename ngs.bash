@@ -481,6 +481,7 @@ if [[ $COVERAGE == "true" ]]; then
         COVPLOT=$(cat <<-'EOF'
         set term png;
         set output figs.''/'.sample.'_'.contig;
+        unset key;
         set title sample.'-'.contig noenhanced;
         set xlabel 'bp';
         set ylabel 'coverage';
