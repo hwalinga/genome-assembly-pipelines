@@ -354,7 +354,7 @@ else
 fi
 
 # Now we can run fastp in parallel
-PARALLEL --rpl '$COMMONPREFIXRAW' --rpl '$TARGET' \
+PARALLEL --rpl "$COMMONPREFIXRAW" --rpl "$TARGET" \
     fastp -i {1} -o fastp/{1t} -I {2} -O fastp/{2t} \
     -5 -3 --correction -qualified_quality_phred 20 --lenght_required 30 \
     -j json/{1cp}.json -h html/{1cp}.html --report_title {1cp} \
@@ -375,7 +375,7 @@ fi
 echo "Starting SOAPNuke"
 
 $MKDIR soapnuke
-PARALLEL --rpl '$COMMONPREFIX' \
+PARALLEL --rpl "$COMMONPREFIX" \
     SOAPnuke filter -1 {1} -2 {2} \
     -C {1/} -D {2/} -o soapnuke/{1cp} \
     ::: fastp/$BASESOURCE1 :::+ fastp/$BASESOURCE2
@@ -420,7 +420,7 @@ for t in $targets; do
 
     echo "Running spades.py for $1."
     $MKDIR spades$t
-    PARALLEL --rpl '$COMMONPREFIX' \
+    PARALLEL --rpl "$COMMONPREFIX" \
         $MKDIR spades$t/{1cp} "&&" \
         spades.py -1 {1} -2 {2} --carefull -o spades$t/{1cp} \
         ::: $corrawsource1 :::+ $corrawsource2
@@ -474,7 +474,7 @@ if [[ $COVERAGE == "true" ]]; then
         $MKDIR {mapped,stats,figs}$t
 
         echo "Mapping to raw reads."
-        PARALLEL --rpl '$FIRSTDIRECTORY' \
+        PARALLEL --rpl "$FIRSTDIRECTORY" \
             test -s {1} "&&" \
             minimap2 -ax sr {1} {2} {3} "|" \
             awk -F\\t -v OFS=\\t "'{\$1=substr(\$1,1,251)}1'" \
@@ -487,26 +487,25 @@ if [[ $COVERAGE == "true" ]]; then
 
         echo "Calculating depth."
         parallel --dry-run $MKDIR stats$t/{/.} ::: mapped$t/*.sam | sh
-        PARALLEL 'samtools depth -a {} | awk "{print $3 > \"stats'$t'/{\.}/\"\$1}"' \
+        PARALLEL 'samtools depth -a {} | awk "{print \$3 > \"stats'$t'/{\.}/\"\$1}"' \
             ::: mapped$t/*.bam
 
-        COVPLOT=$(cat <<-'EOF'
-        set term png;
-        set output figs.''/'.sample.'_'.contig;
-        unset key;
-        set title sample.'-'.contig noenhanced;
-        set xlabel 'bp';
-        set ylabel 'coverage';
-        unset key;
-        stats file nooutput;
-        plot [:STATS_records] file with dots;
+    COVPLOT=$(cat <<-'EOF'
+    set term png;
+    set output figs.'/'.sample.'_'.contig;
+    set title sample.'-'.contig noenhanced;
+    set xlabel 'bp';
+    set ylabel 'coverage';
+    unset key;
+    stats file nooutput;
+    plot [:STATS_records] file with dots;
 EOF
-        )
+    )
 
-        echo "Plotting coverage depth."
-        PARALLEL -q --rpl '$FIRSTDIRECTORY' \
-            gnuplot -e "sample='{m}'; contig='{/}'; file='{}'; figs='figs$t'"$COVPLOT \
-            ::: stats$t/*/*
+    echo "Plotting coverage depth."
+    PARALLEL -q --rpl "$FIRSTDIRECTORY" \
+        gnuplot -e "sample='{m}'; contig='{/}'; file='{}'; figs='figs';$COVPLOT" \
+        ::: stats$t/*/*
     done
 fi
 
