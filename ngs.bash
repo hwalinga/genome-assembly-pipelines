@@ -230,8 +230,16 @@ PARALLEL () {
     MEM="$(printf '%.f' $(bc -l <<<"$(CALCFREEMEM) / $PROC"))G"
     PROC=$(printf '%.f' $PROC)
 
-    parallel $TEST -j $PROC --memfree $MEM --load 100% --delay 30 "$@"
+    parallel --plus $TEST -j $PROC --memfree $MEM --load 100% --delay 30 "$@"
 }
+if [[ $TEST == "--dry-run" ]]; then
+    MKDIR="echo mkdir -p"
+    CP="echo cp"
+    KEEP=true
+else
+    MKDIR="mkdir -p"
+    CP="cp"
+fi
 
 # I can inject some Perl inside GNU Parallel,
 # that's what these are doing:
@@ -278,13 +286,13 @@ fi
 
 # Check if first and second files have a common substring.
 if [[ $WITHDIRECTORY == "false" ]]; then
-    if [[ ! $(parallel --rpl $COMMONPREFIX echo {1cp} ::: $SOURCE1 :::+ $SOURCE2) ]]; then
+    if [[ ! $(parallel --rpl '$COMMONPREFIX' echo {1cp} ::: $SOURCE1 :::+ $SOURCE2) ]]; then
         >&2 echo "There is no common substring between the two lists of sources files"
         >&2 echo "Exiting"
         exit 1
     fi
 else
-    if [[ ! $(parallel --rpl $COMMONPREFIXWITHDIR echo {1cp} ::: $SOURCE1 :::+ $SOURCE2) ]]; then
+    if [[ ! $(parallel --rpl '$COMMONPREFIXWITHDIR' echo {1cp} ::: $SOURCE1 :::+ $SOURCE2) ]]; then
         >&2 echo "There is no common substring between the two lists of the source files."
         >&2 echo "Exiting"
         exit 1
@@ -300,21 +308,21 @@ MOVED=false
 if [[ $NOMOVE == "false" ]] && [[ `stat --printf '%d' $(echo $SOURCE1 | head -1)` -ne `stat --printf '%d' ./` ]]; then
     MOVED=true
     echo "Moving files from remote to local 'raw'"
-    mkdir -p raw
+    $MKDIR raw
     if [[ WITHDIRECTORY == "true" ]]; then
         echo "Moving files"
         for i in $SOURCE1 $SOURCE2; do
             echo "Moving file $i"
-            cp $i raw/$(perl -pe $WITHDIRECTORYREGEX<<<$i)
+            $CP $i raw/$(perl -pe '$WITHDIRECTORYREGEX'<<<$i)
         done
-        BASESOURCE1=$(perl -pe $WITHDIRECTORYREGEX<<<"$SOURCE1")
-        BASESOURCE2=$(perl -pe $WITHDIRECTORYREGEX<<<"$SOURCE2")
+        BASESOURCE1=$(perl -pe '$WITHDIRECTORYREGEX'<<<"$SOURCE1")
+        BASESOURCE2=$(perl -pe '$WITHDIRECTORYREGEX'<<<"$SOURCE2")
         echo "Moving done"
     else
         echo "Moving first files"
-        cp $SOURCE1 raw
+        $CP $SOURCE1 raw
         echo "Moving second files"
-        cp $SOURCE2 raw
+        $CP $SOURCE2 raw
         echo "Moving done"
         BASESOURCE1=$(sed 's:.*/::'<<<"$SOURCE1")
         BASESOURCE2=$(sed 's:.*/::'<<<"$SOURCE2")
@@ -328,7 +336,7 @@ fi
 echo "Starting fastp"
 
 # Figuring out where the raw files are
-mkdir -p fastp html json
+$MKDIR fastp html json
 if [[ $MOVED == "true" ]]; then
     RAWSOURCE1=raw/$BASESOURCE1
     RAWSOURCE2=raw/$BASESOURCE2
@@ -346,7 +354,7 @@ else
 fi
 
 # Now we can run fastp in parallel
-PARALLEL --rpl $COMMONPREFIXRAW --rpl $TARGET \
+PARALLEL --rpl '$COMMONPREFIXRAW' --rpl '$TARGET' \
     fastp -i {1} -o fastp/{1t} -I {2} -O fastp/{2t} \
     -5 -3 --correction -qualified_quality_phred 20 --lenght_required 30 \
     -j json/{1cp}.json -h html/{1cp}.html --report_title {1cp} \
@@ -355,7 +363,7 @@ PARALLEL --rpl $COMMONPREFIXRAW --rpl $TARGET \
 echo "Finished fastp"
 if [[ $PDF == "true" ]]; then
     echo "Making pdf about quality, this is the same as the HTML, just not interactive."
-    mkdir -p pdf
+    $MKDIR pdf
     PARALLEL wkhtmltopdf {} pdf/{/.} ::: html/*
 fi
 
@@ -366,8 +374,8 @@ fi
 
 echo "Starting SOAPNuke"
 
-mkdir -p soapnuke
-PARALLEL --rpl $COMMONPREFIX \
+$MKDIR soapnuke
+PARALLEL --rpl '$COMMONPREFIX' \
     SOAPnuke filter -1 {1} -2 {2} \
     -C {1/} -D {2/} -o soapnuke/{1cp} \
     ::: fastp/$BASESOURCE1 :::+ fastp/$BASESOURCE2
@@ -379,7 +387,7 @@ fi
 
 if [[ $PHAGE == "true" ]]; then
     echo "Starting seqtk for phage analysis."
-    mkdir -p seqtk
+    $MKDIR seqtk
     PARALLEL seqtk sample {} 25000 ">" seqtk/{/.} ::: soapnuke/*/*.fq.gz
     if [[ $BACTERIA == "false" ]] && [[ $KEEP == "false" ]]; then
         echo "Removing SOAPnuke files"
@@ -411,9 +419,9 @@ for t in $targets; do
     fi
 
     echo "Running spades.py for $1."
-    mkdir -p spades$t
-    PARALLEL --rpl $COMMONPREFIX \
-        mkdir -p spades$t/{1cp} "&&" \
+    $MKDIR spades$t
+    PARALLEL --rpl '$COMMONPREFIX' \
+        $MKDIR spades$t/{1cp} "&&" \
         spades.py -1 {1} -2 {2} --carefull -o spades$t/{1cp} \
         ::: $corrawsource1 :::+ $corrawsource2
 
@@ -463,11 +471,11 @@ if [[ $COVERAGE == "true" ]]; then
         fi
 
         echo "Working on $t"
-        mkdir -p {mapped,stats,figs}$t
+        $MKDIR {mapped,stats,figs}$t
 
         echo "Mapping to raw reads."
-        PARALLEL --rpl $FIRSTDIRECTORY \
-            test -s {1} "&&"
+        PARALLEL --rpl '$FIRSTDIRECTORY' \
+            test -s {1} "&&" \
             minimap2 -ax sr {1} {2} {3} "|" \
             awk -F\\t -v OFS=\\t "'{\$1=substr(\$1,1,251)}1'" \
             ">" mapped$t/{1m}.sam \
@@ -478,7 +486,7 @@ if [[ $COVERAGE == "true" ]]; then
             ::: mapped$t/*.sam
 
         echo "Calculating depth."
-        parallel --dry-run mkdir -p stats$t/{/.} ::: mapped$t/*.sam | sh
+        parallel --dry-run $MKDIR stats$t/{/.} ::: mapped$t/*.sam | sh
         PARALLEL 'samtools depth -a {} | awk "{print $3 > \"stats'$t'/{\.}/\"\$1}"' \
             ::: mapped$t/*.bam
 
@@ -496,7 +504,7 @@ EOF
         )
 
         echo "Plotting coverage depth."
-        PARALLEL -q --rpl $FIRSTDIRECTORY \
+        PARALLEL -q --rpl '$FIRSTDIRECTORY' \
             gnuplot -e "sample='{m}'; contig='{/}'; file='{}'; figs='figs$t'"$COVPLOT \
             ::: stats$t/*/*
     done

@@ -14,21 +14,24 @@ $0 [--options] "FolderPath" OR/AND "FastqFiles"
     This way you can resume the pipeline when it crashed unexpectedly.
 --nocov:
     Do not plot the coverage plots.
+-i [FILE]
+    Instead of supplying as an argument you can pass the fastq file
+    with the -i option. Note that this way the file will not be copied.
+    (Copying might be desirable if it is on an unstable filesystem.)
 --help,-h
     Plot this help and exit.
 EOF
 )
 
+echo "========"
 echo "Parsing arguments"
+echo "========"
 
-NOMOVE=false
 KEEP=false
-BACTERIA=true
-PHAGE=true
 TEST=""
 COVERAGE=true
-PDF=true
 ERRORLOG="error.log"
+INPUT=""
 
 while [[ -n "$1" ]] && [[ "$1" =~ ^- ]]; do
     case "$1" in
@@ -49,6 +52,10 @@ while [[ -n "$1" ]] && [[ "$1" =~ ^- ]]; do
             echo $HELP
             >&2 echo "Exiting"
             exit 1
+            ;;
+        -i)
+            shift
+            INPUT="$1"
             ;;
         --)
             break
@@ -74,6 +81,7 @@ for i in "$@"; do
     fi
 done;
 
+echo "========"
 echo "Arguments parsed:"
 echo "files: ${FILES[@}]}"
 echo "dirs: ${DIRS[@]}"
@@ -86,6 +94,7 @@ fi
 if [[ $KEEP == "true" ]]; then
     echo "Keep inbetween results."
 fi
+echo "========"
 
 #########################
 # CHECKING DEPENDENCIES #
@@ -101,6 +110,7 @@ program_missing () {
     >&2 echo "Provided that one of these package managers is installed."
 }
 
+echo "========"
 echo "Checking dependencies."
 echo "Checking core dependencies."
 for program in free ps printf awk perl sed; do
@@ -146,7 +156,9 @@ if [[ $COVERAGE == "true" ]]; then
     done
 fi
 
+echo "========"
 echo "Dependencies met."
+echo "========"
 
 #########################################
 # GNU Parallel helper functions/strings #
@@ -182,43 +194,67 @@ PARALLEL () {
     MEM="$(printf '%.f' $(bc -l <<<"$(CALCFREEMEM) / $PROC"))G"
     PROC=$(printf '%.f' $PROC)
 
-    parallel $TEST -j $PROC --memfree $MEM --load 100% --delay 30 "$@"
+    parallel --plus $TEST -j $PROC --memfree $MEM --load 100% --delay 30 "$@"
 }
+if [[ $TEST == "--dry-run" ]]; then
+    MKDIR="echo mkdir -p"
+    CP="echo cp"
+    KEEP=true
+else
+    MKDIR="mkdir -p"
+    CP="cp"
+fi
+
 # GNU Parallel --rpl strings.
 # Perl regex to find the first directory:
 FIRSTDIRECTORY='{m} s:.*/(?=.*/)::;s:/.*::;'
 
-# move
-
-# Change this here so that user can just serve the whole file instead.
+# MOVE
 
 # TODO: Remove inbetween results.
 
-INPUT=ont.fastq
-cat "${FILES[@]}" >> $INPUT
-find "${DIRS[@]}" -type f | xargs cat >> $INPUT
+if [[ -z "$INPUT" ]]; then
+    INPUT=ont.fastq
+    if [[ $TEST == "--dry-run" ]]; then
+        echo "FILES"
+        echo "${FILES[@]}"
+        echo "DIRS"
+        echo "${DIRS[@]}"
+    else
+        cat "${FILES[@]}" >> $INPUT
+        find "${DIRS[@]}" -type f | xargs cat >> $INPUT
+    fi
+fi
 # demultiplex
-mkdir -p demultiplex
+$MKDIR demultiplex
 >&2 echo "Using kit NBD103/NBD104, change script to change."
-qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle
+if [[ $TEST == "--dry-run" ]]; then
+    echo "qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle"
+else
+    qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle
+fi
 # filter good bar codes
-mkdir -p demultiplex_filter
-find demultiplex ! -name none.fastq -type f -size +1M | xarp cp -t demultiplex_filter
+$MKDIR demultiplex_filter
+if [[ $TEST == "--dry-run" ]]; then
+    echo "find demultiplex ! -name none.fastq -type f -size +1M | xarp cp -t demultiplex_filter"
+else
+    find demultiplex ! -name none.fastq -type f -size +1M | xargs cp -t demultiplex_filter
+fi
 
 # Filter on quality
-mkdir -p nanofilt
+$MKDIR nanofilt
 PARALLEL NanoFilt -q 7 -l 500 {} ">" nanofilt/{/} ::: demultiplex_filter/*
-mkdir -p filtlong
+$MKDIR filtlong
 PARALLEL filtlong -t 500000000 {} ">" filtlong/{/} ::: nanofilt/*
 
 # assemble
-mkdir -p flye
+$MKDIR flye
 >&2 echo "Assembling for phage target length (40k bp)."
 PARALLEL -j1 flye -g 40k -m 3000 -i 4 --meta -t 8 --nano-raw {} -o flye/{/.} ::: filtlong/*
 
 # polishing
-mkdir -p racon{0..4}
-mkdir -p mapped{0..3}
+$MKDIR racon{0..4}
+$MKDIR mapped{0..3}
 parallel --dry-run cp {}/assembly.fasta racon0/{/}.fa ::: flye/* | sh
 PARALLEL \
     "for i in {0..3}; do minimap2 -ax map-ont racon\$i/{/.}.fa filtlong/{/.}.fastq > mapped\$i/{/.}.sam && racon -t 4 -m 8 -x -6 -g -8 -w 500 filtlong/{/.}.fastq mapped\$i/{/.}.sam racon\$i/{/.}.fa > racon\$((i+1))/{/.}.fa; done" ::: racon0/*
@@ -226,28 +262,29 @@ PARALLEL \
 PARALLEL -j2 medaka_consensus -i filtlong/{/.}.fastq -d {} -o medaka/{/.} -t 4 -m r941_flip235 ::: racon4/*
 
 
+shopt -s extglob
+echo "========"
+echo "Making coverage plots"
+echo "========"
 # Coverage plots.
 if [[ $COVERAGE == "true" ]]; then
-    mkdir -p {medaka_mapped,stats,figs}
+    $MKDIR {medaka_mapped,stats,figs}
 
     echo "Mapping to raw reads."
     PARALLEL \
-        test -s {}.consensus.fasta "&&"
+        test -s {}.consensus.fasta "&&" \
         minimap2 -ax map-ont {} filtlong/{/}.fastq "|" \
         awk -F\\t -v OFS=\\t "'{\$1=substr(\$1,1,251)}1'" \
         ">" medaka_mapped/{/}.sam \
         ::: medaka/*
 
     echo "Sorting and indexing of sam files."
-    PARALLEL --plus 'samtools sort {} > {.}.bam && samtools index {.}.bam && samtools calmd {.}.bam medaka/{/.}/consensus.fasta > {.}.md.sam && samtools sort {.}.md.sam > {.}.md.bam && samtools index {.}.md.bam' \
+    PARALLEL 'samtools sort {} > {.}.bam && samtools index {.}.bam && samtools calmd {.}.bam medaka/{/.}/consensus.fasta > {.}.md.sam && samtools sort {.}.md.sam > {.}.md.bam && samtools index {.}.md.bam' \
         ::: medaka_mapped/*.sam
 
     echo "Calculating depth."
-    parallel --dry-run mkdir -p stats/{/.} ::: mapped/*.sam | sh
-    shopt -s extglob
-    PARALLEL 'samtools depth -a {} | awk "{print $3 > \"stats/{\.}/\"\$1}"' \
-        ::: medaka_mapped/!(*.md).bam
-    shopt -u extglob
+    parallel --dry-run $MKDIR stats/{/.} ::: mapped/*.sam | sh
+    PARALLEL 'samtools depth -a {} | awk "{print $3 > \"stats/{\.}/\"\$1}"' ::: medaka_mapped/!(*.md).bam
 
     COVPLOT=$(cat <<-'EOF'
     set term png;
@@ -262,9 +299,12 @@ EOF
     )
 
     echo "Plotting coverage depth."
-    PARALLEL -q --rpl $FIRSTDIRECTORY \
+    PARALLEL -q --rpl '$FIRSTDIRECTORY' \
         gnuplot -e "sample='{m}'; contig='{/}'; file='{}'; figs='figs'"$COVPLOT \
         ::: stats/*/*
 fi
+shopt -u extglob
 
 # Variance calling / sequence contribution?
+echo "Done"
+exit 0
