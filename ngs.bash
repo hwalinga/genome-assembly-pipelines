@@ -17,7 +17,9 @@ $0 [--options] "SOURCE1" "SOURCE2"
     (Results still end up on the current directory regardless of this option.)
 --keep:
     This flag will make sure the inbetween results will be kept.
-    This way you can resume the pipeline when it crashed unexpectedly
+    This way you can resume the pipeline when it crashed unexpectedly.
+    (NB. However, at the moment there are no checks in place that check
+    if a part of the pipeline has already been completed in a previous run.)
 --bacteria,--phage,--both:
     Set one of this option if you have bacteria or phage DNA.
     In this case the difference with a phage assembly is that it samples the
@@ -25,6 +27,8 @@ $0 [--options] "SOURCE1" "SOURCE2"
     at the moment.
 --nocov:
     Do not plot the coverage plots.
+--help,-h
+    Plot this help and exit.
 EOF
 )
 
@@ -122,9 +126,9 @@ program_missing () {
     $program=$1
     >&2 echo "$program not installed"
     >&2 echo "You can install with:"
-    >&2 echo "conda -c bioconda install ${program%.*}"
+    >&2 echo "conda -c bioconda install ${program%.*} (Anaconda)"
     >&2 echo "or:"
-    >&2 echo "brew install ${program%.*}"
+    >&2 echo "brew install ${program%.*} (Homebrew)"
     >&2 echo "Provided that one of these package managers is installed."
 }
 
@@ -161,9 +165,9 @@ for program in fastp spades.py parallel; do
     fi
 done
 if [[ $PHAGE == "true" ]] && [[ ! `command -v seqtk` ]]; then
-    >&2 echo "Need seqtk for downsampling data."
-    >&2 echo "There is not a strict requirement for this,"
-    >&2 echo "So you can also assemble as if you assemble bacteria."
+    >&2 echo "Need seqtk for downsampling data, when assembling phages"
+    >&2 echo "There is not a strict requirement for this, but recommended."
+    >&2 echo "But you can also assemble as if you assemble bacteria."
     >&2 echo ""
     program_missing $program
     >&2 echo "Exiting"
@@ -181,7 +185,7 @@ if [[ $COVERAGE == "true" ]]; then
     done
     if [[ ! `samtools --version` ]]; then
         >&2 echo "You have installed an too old version for samtools."
-        >&2 echo "Please install the version above 1.0."
+        >&2 echo "Please install a version above 1.0."
         >&2 echo "This program is only needed for the coverage plots."
         >&2 echo "If you do not ask for coverage plots with the --nocov option,"
         >&2 echo "you can still assemble."
@@ -196,7 +200,7 @@ echo "Dependencies met."
 # GNU Parallel helper functions/strings #
 #########################################
 
-# I am not writing a full blown load manager,
+# I am not writing/using a full blown load manager,
 # but GNU Parallel can do its best.
 CALCFREEPROC () {
     # Calculate the amount of free processing powers left (in # of processors)
@@ -416,16 +420,16 @@ for t in $targets; do
     # If assembly failed, it is easier for the implementation to just
     # have an empty file instead of no file:
     touch -a spades$t/*/contigs.fasta
-    for ass in spades$t/*/contigs.fasta; do
-        if [[ ! -s $ass ]]; then
-            echo "Seems that the assembly of $ass has failed." |
+    for assm in spades$t/*/contigs.fasta; do
+        if [[ ! -s $assm ]]; then
+            echo "Seems that the assembly of $assm has failed." |
                 tee -a $ERRORLOG | cat 1>&2
             echo "Here are the last 40 lines of spades.log" >> $ERRORLOG
             tail -40 ${ass%/*}/spades.log >> $ERRORLOG
         fi
     done
 
-    if [[ $COVERAGE == "false" ]]; then
+    if [[ $COVERAGE == "false" ]] && [[ $KEEP == "false" ]]; then
         if [[ $t == $phage_suffix ]]; then
             echo "Removing seqtk files (for phage assembly)"
             rm -rf seqtk
@@ -493,7 +497,7 @@ EOF
         echo "Plotting coverage depth."
         PARALLEL -q --rpl $FIRSTDIRECTORY \
             gnuplot -e "sample='{m}'; contig='{/}'; file='{}'; figs='figs$t'"$COVPLOT \
-            ::: stats/*/*
+            ::: stats$t/*/*
     done
 fi
 
