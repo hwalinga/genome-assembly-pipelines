@@ -83,7 +83,7 @@ done;
 
 echo "========"
 echo "Arguments parsed:"
-echo "files: ${FILES[@}]}"
+echo "files: ${FILES[@]}"
 echo "dirs: ${DIRS[@]}"
 if [[ $COVERAGE == "true" ]]; then
     echo "Run with making coverage plots."
@@ -213,6 +213,7 @@ FIRSTDIRECTORY='{m} s:.*/(?=.*/)::;s:/.*::;'
 
 # TODO: Remove inbetween results.
 
+echo "$INPUT"
 if [[ -z "$INPUT" ]]; then
     INPUT=ont.fastq
     if [[ $TEST == "--dry-run" ]]; then
@@ -221,8 +222,11 @@ if [[ -z "$INPUT" ]]; then
         echo "DIRS"
         echo "${DIRS[@]}"
     else
+        echo "We are collecting the fastq files"
         cat "${FILES[@]}" >> $INPUT
-        find "${DIRS[@]}" -type f | xargs cat >> $INPUT
+        if [[ ! -z "$DIRS" ]]; then
+            find "${DIRS[@]}" -type f | xargs cat >> $INPUT
+        fi
     fi
 fi
 # demultiplex
@@ -231,7 +235,7 @@ $MKDIR demultiplex
 if [[ $TEST == "--dry-run" ]]; then
     echo "qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle"
 else
-    qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle
+    echo qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle
 fi
 # filter good bar codes
 $MKDIR demultiplex_filter
