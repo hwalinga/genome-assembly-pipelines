@@ -146,14 +146,13 @@ if [[ ! `command -v NanoFilt` ]]; then
 fi
 if [[ $COVERAGE == "true" ]]; then
     echo "Checking dependencies for coverage plots."
-    echo "If these dependencies fail, you can still assemble with the --nocov option."
-    for program in gnuplot; do
-        if [[ ! `command -v $program` ]]; then
-            program_missing $program
-            >&2 echo "Exiting"
-            exit 1
-        fi
-    done
+    if [[ -z "`gnuplot --version | awk -F' |\\.' '$2>=5'`" ]]; then
+        >&2 echo "gnuplot not installed or a version installed lower than 5."
+        program_missing $pgram
+        >&2 echo "You can still assemble with the --nocov option."
+        >&2 echo "Exiting"
+        exit 1
+    fi
 fi
 
 echo "========"
@@ -235,7 +234,7 @@ $MKDIR demultiplex
 if [[ $TEST == "--dry-run" ]]; then
     echo "qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle"
 else
-    echo qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle
+    qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle
 fi
 # filter good bar codes
 $MKDIR demultiplex_filter
@@ -276,9 +275,9 @@ if [[ $COVERAGE == "true" ]]; then
 
     echo "Mapping to raw reads."
     PARALLEL \
-        test -s {}.consensus.fasta "&&" \
-        minimap2 -ax map-ont {} filtlong/{/}.fastq "|" \
-        awk -F\\t -v OFS=\\t "'{\$1=substr(\$1,1,251)}1'" \
+        test -s {}/consensus.fasta "&&" \
+        minimap2 -ax map-ont {}/consensus.fasta filtlong/{/}.fastq "|" \
+        awk -F\\\\t -v OFS=\\\\t "'{\$1=substr(\$1,1,251)}1'" \
         ">" medaka_mapped/{/}.sam \
         ::: medaka/*
 
@@ -287,12 +286,12 @@ if [[ $COVERAGE == "true" ]]; then
         ::: medaka_mapped/*.sam
 
     echo "Calculating depth."
-    parallel --dry-run $MKDIR stats/{/.} ::: mapped/*.sam | sh
-    PARALLEL 'samtools depth -a {} | awk "{print $3 > \"stats/{\.}/\"\$1}"' ::: medaka_mapped/!(*.md).bam
+    parallel --dry-run $MKDIR stats/{/.} ::: medaka_mapped/!(*.md).sam | sh
+    PARALLEL 'samtools depth -a {} | awk "{print \$3 > \"stats/{/.}/\"\$1}"' ::: medaka_mapped/!(*.md).bam
 
     COVPLOT=$(cat <<-'EOF'
     set term png;
-    set output figs.''/'.sample.'_'.contig;
+    set output figs.'/'.sample.'_'.contig;
     set title sample.'-'.contig noenhanced;
     set xlabel 'bp';
     set ylabel 'coverage';
@@ -303,8 +302,8 @@ EOF
     )
 
     echo "Plotting coverage depth."
-    PARALLEL -q --rpl '$FIRSTDIRECTORY' \
-        gnuplot -e "sample='{m}'; contig='{/}'; file='{}'; figs='figs'"$COVPLOT \
+    PARALLEL -q --rpl "$FIRSTDIRECTORY" \
+        gnuplot -e "sample='{m}'; contig='{/}'; file='{}'; figs='figs';$COVPLOT" \
         ::: stats/*/*
 fi
 shopt -u extglob
