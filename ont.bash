@@ -49,7 +49,7 @@ while [[ -n "$1" ]] && [[ "$1" =~ ^- ]]; do
             ;;
         -h|--help)
             >&2 echo "Printing help:"
-            echo $HELP
+            echo "$HELP"
             >&2 echo "Exiting"
             exit 1
             ;;
@@ -146,7 +146,7 @@ if [[ ! `command -v NanoFilt` ]]; then
 fi
 if [[ $COVERAGE == "true" ]]; then
     echo "Checking dependencies for coverage plots."
-    if [[ -z "`gnuplot --version | awk -F' |\\.' '$2>=5'`" ]]; then
+    if [[ -z "$(gnuplot --version | awk -F' |\\.' '$2>=5')" ]]; then
         >&2 echo "gnuplot not installed or a version installed lower than 5."
         program_missing $pgram
         >&2 echo "You can still assemble with the --nocov option."
@@ -222,12 +222,22 @@ if [[ -z "$INPUT" ]]; then
         echo "${DIRS[@]}"
     else
         echo "We are collecting the fastq files"
-        cat "${FILES[@]}" >> $INPUT
+        if [[ ! -z "$FILES" ]]; then
+            cat "${FILES[@]}" >> $INPUT
+        fi
         if [[ ! -z "$DIRS" ]]; then
             find "${DIRS[@]}" -type f | xargs cat >> $INPUT
         fi
     fi
 fi
+
+if [[ ! -s "$INPUT" ]]; then
+    rm -f "$INPUT"
+    >&2 echo "Could not find any fastq reads in the input arguments you provided."
+    >&2 echo "Exiting"
+    exit 1
+fi
+
 # demultiplex
 $MKDIR demultiplex
 >&2 echo "Using kit NBD103/NBD104, change script to change."

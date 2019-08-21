@@ -71,7 +71,7 @@ while [[ -n "$1" ]]; do
             ;;
         -h|--help)
             >&2 echo "Printing help:"
-            echo $HELP
+            echo "$HELP"
             >&2 echo "Exiting"
             exit 1
             ;;
