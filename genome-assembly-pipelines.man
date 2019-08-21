@@ -1,0 +1,5 @@
+.TH man 7 "21 August 2019" "1.0" "Documentation for genome assembly pipelines"
+
+.SH OXFORD NANOPORE TECHNOLOGIES (ont.bash)
+
+.SH NEXT GENERATION SEQUENCING (ngs.bash)
