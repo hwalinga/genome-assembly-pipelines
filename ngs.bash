@@ -390,10 +390,10 @@ echo "Starting SOAPNuke"
 echo "========"
 
 $MKDIR soapnuke
-PARALLEL --rpl "$COMMONPREFIX" \
-    SOAPnuke filter -1 {1} -2 {2} \
-    -C {1/} -D {2/} -o soapnuke/{1cp} \
-    ::: fastp/$BASESOURCE1 :::+ fastp/$BASESOURCE2
+# PARALLEL --rpl "$COMMONPREFIX" \
+#     SOAPnuke filter -1 {1} -2 {2} \
+#     -C {1/} -D {2/} -o soapnuke/{1cp} \
+#     ::: fastp/$BASESOURCE1 :::+ fastp/$BASESOURCE2
 
 if [[ $KEEP == "false" ]]; then
     echo "Removing fastp (not the quality output)."
@@ -403,7 +403,7 @@ fi
 if [[ $PHAGE == "true" ]]; then
     echo "Starting seqtk for phage analysis."
     $MKDIR seqtk
-    PARALLEL seqtk sample {} 25000 ">" seqtk/{/.} ::: soapnuke/*/*.fq.gz
+    # PARALLEL seqtk sample {} 25000 ">" seqtk/{/.} ::: soapnuke/*/*.fq.gz
     if [[ $BACTERIA == "false" ]] && [[ $KEEP == "false" ]]; then
         echo "Removing SOAPnuke files"
         rm -rf soapnuke
@@ -426,19 +426,19 @@ for t in $targets; do
 
     if [[ $t == $phage_suffix ]]; then
         # phage corrected raw sources
-        corrawsource1=seqtk/$BASESOURCE1
-        corrawsource2=seqtk/$BASESOURCE2
+        corrawsource1=seqtk/${BASESOURCE1%.gz}
+        corrawsource2=seqtk/${BASESOURCE2%.gz}
     else
         # bacteria corrected raw sources
-        corrawsource1=soapnuke/*/$BASESOURCE1.gz
-        corrawsource2=soapnuke/*/$BASESOURCE2.gz
+        corrawsource1=soapnuke/*/${BASESOURCE1%.gz}.gz
+        corrawsource2=soapnuke/*/${BASESOURCE2%.gz}.gz
     fi
 
-    echo "Running spades.py for $t."
+    echo "Running spades.py for ${t#_}."
     $MKDIR spades$t
     PARALLEL --rpl "$COMMONPREFIX" \
         mkdir -p spades$t/{1cp} "&&" \
-        spades.py -1 {1} -2 {2} --carefull -o spades$t/{1cp} \
+        spades.py -1 {1} -2 {2} --careful -o spades$t/{1cp} \
         ::: $corrawsource1 :::+ $corrawsource2
 
     # If assembly failed, it is easier for the implementation to just
@@ -487,7 +487,7 @@ if [[ $COVERAGE == "true" ]]; then
         fi
 
         echo "========"
-        echo "Working on $t"
+        echo "Working on ${t#_}"
         $MKDIR {mapped,stats,figs}$t
 
         echo "Mapping to raw reads."
