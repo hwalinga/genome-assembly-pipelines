@@ -9,6 +9,9 @@ like Snakemake or Nextflow.
 # Installation
 Installation is simple: Clone this folder `git clone https://github.com/hwalinga/genome-assembly-pipelines`. Or `wget` the specific file you want with for example `https://raw.githubusercontent.com/hwalinga/genome-assembly-pipelines/master/ngs.bash`. Running the program is simple, just use `bash path/to/pipeline.bash`.
 
+(For advanced usage you can make the scripts available with the `$PATH` variable
+and `chmod +x` them.)
+
 Almost all Linux computers will have a sufficient modern bash running to have no problems. bash on a Mac is probably too old to run and needs to updated.
 
 You still have to make sure that the you have installed the dependencies for the assemblying itself. You can install this with Anaconda or Homebrew. (SOAPnuke has to be installed manually)
@@ -49,5 +52,7 @@ and run `bash path/to/pipeline.bash with the correct argments`, when in this
 workspace. (`bash path/to/pipeline.bash --help` can help you with how to use.)
 
 ## NGS
+
+kkkkk
 
 ## ONT
