@@ -6,7 +6,9 @@
 
 HELP=$(cat << EOF
 Usage:
-$0 [--options] "SOURCE1" "SOURCE2"
+ngs.bash [--options] "SOURCE1_glob" "SOURCE2_glob"
+Provide the source1 and source2 interleaved glob patterns quoted, so that
+they will not be expanded before the program can read them.
 --test:
     Show commands to run, but not execute them.
 --nomove:

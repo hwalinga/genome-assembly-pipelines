@@ -53,6 +53,69 @@ workspace. (`bash path/to/pipeline.bash --help` can help you with how to use.)
 
 ## NGS
 
-kkkkk
+```
+Usage:
+ngs.bash [--options] "SOURCE1_glob" "SOURCE2_glob"
+Provide the source1 and source2 interleaved glob patterns quoted, so that
+they will not be expanded before the program can read them.
+--test:
+    Show commands to run, but not execute them.
+--nomove:
+    If source files are on a different parition than the current directory,
+    they will first will be moved to this partition.
+    If you have a reliable connection between the two drives, you can disable
+    that default behavior with this flag.
+    (Results still end up on the current directory regardless of this option.)
+--keep:
+    This flag will make sure the inbetween results will be kept.
+    This way you can resume the pipeline when it crashed unexpectedly.
+    (NB. However, at the moment there are no checks in place that check
+    if a part of the pipeline has already been completed in a previous run.)
+--bacteria,--phage,--both:
+    Set one of this option if you have bacteria or phage DNA.
+    In this case the difference with a phage assembly is that it samples the
+    data, so that the assembly is faster. There isn't any difference further
+    at the moment.
+--nocov:
+    Do not plot the coverage plots.
+--help,-h
+    Plot this help and exit.
+```
+
+For NGS you will have paired-end reads. The paths to this data must be quoted.
+For example:
+
+```
+bash ngs.bash "path/to/files/*_1.fq.gz" "path/to/files/*_2.fq.gz"
+```
 
 ## ONT
+
+```
+Usage:
+ont.bash [--options] "FolderPath" OR/AND "FastqFiles"
+--test:
+    Show commands to run, but not execute them.
+--keep:
+    This flag will make sure the inbetween results will be kept.
+    This way you can resume the pipeline when it crashed unexpectedly.
+    (Currently not implemented.)
+--nocov:
+    Do not plot the coverage plots.
+-i [FILE]
+    Instead of supplying as an argument you can pass the fastq file
+    with the -i option. Note that this way the file will not be copied.
+    (Copying might be desirable if it is on an unstable filesystem.)
+--help,-h
+    Plot this help and exit.
+```
+
+The ONT pipeline starts with the fastq files.
+(Basecalling the fast5 files should be done on a powerfull machine with GPU acceleration.)
+You can provide a list of these files or the folder in which to find the
+fastq files as arguments.
+For example:
+
+```
+bash ont.bash /path/to/fastq/files/fastq_pass/
+```
