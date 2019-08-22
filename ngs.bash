@@ -366,12 +366,11 @@ else
 fi
 
 # Now we can run fastp in parallel
-# PARALLEL --rpl "$COMMONPREFIXRAW" --rpl "$TARGET" \
-#     fastp -i {1} -o fastp/{1t} -I {2} -O fastp/{2t} \
-#     -5 -3 --correction --qualified_quality_phred 20 --length_required 30 \
-#     -j json/{1cp}.json -h html/{1cp}.html --report_title {1cp} \
-#     ::: $RAWSOURCE1 :::+ $RAWSOURCE2
-PDF=false
+PARALLEL --rpl "$COMMONPREFIXRAW" --rpl "$TARGET" \
+    fastp -i {1} -o fastp/{1t} -I {2} -O fastp/{2t} \
+    -5 -3 --correction --qualified_quality_phred 20 --length_required 30 \
+    -j json/{1cp}.json -h html/{1cp}.html --report_title {1cp} \
+    ::: $RAWSOURCE1 :::+ $RAWSOURCE2
 
 echo "Finished fastp"
 echo "========"
@@ -390,10 +389,10 @@ echo "Starting SOAPNuke"
 echo "========"
 
 $MKDIR soapnuke
-# PARALLEL --rpl "$COMMONPREFIX" \
-#     SOAPnuke filter -1 {1} -2 {2} \
-#     -C {1/} -D {2/} -o soapnuke/{1cp} \
-#     ::: fastp/$BASESOURCE1 :::+ fastp/$BASESOURCE2
+PARALLEL --rpl "$COMMONPREFIX" \
+    SOAPnuke filter -1 {1} -2 {2} \
+    -C {1/} -D {2/} -o soapnuke/{1cp} \
+    ::: fastp/$BASESOURCE1 :::+ fastp/$BASESOURCE2
 
 if [[ $KEEP == "false" ]]; then
     echo "Removing fastp (not the quality output)."
@@ -403,7 +402,7 @@ fi
 if [[ $PHAGE == "true" ]]; then
     echo "Starting seqtk for phage analysis."
     $MKDIR seqtk
-    # PARALLEL seqtk sample {} 25000 ">" seqtk/{/.} ::: soapnuke/*/*.fq.gz
+    PARALLEL seqtk sample {} 25000 ">" seqtk/{/.} ::: soapnuke/*/*.fq.gz
     if [[ $BACTERIA == "false" ]] && [[ $KEEP == "false" ]]; then
         echo "Removing SOAPnuke files"
         rm -rf soapnuke
@@ -478,12 +477,12 @@ if [[ $COVERAGE == "true" ]]; then
 
         if [[ $t == $phage_suffix ]]; then
             # phage corrected raw sources
-            corrawsource1=seqtk/$BASESOURCE1
-            corrawsource2=seqtk/$BASESOURCE2
+            corrawsource1=seqtk/${BASESOURCE1%.gz}
+            corrawsource2=seqtk/${BASESOURCE2%.gz}
         else
             # bacteria corrected raw sources
-            corrawsource1=soapnuke/*/$BASESOURCE1.gz
-            corrawsource2=soapnuke/*/$BASESOURCE2.gz
+            corrawsource1=soapnuke/*/${BASESOURCE1%.gz}.gz
+            corrawsource2=soapnuke/*/${BASESOURCE2%.gz}.gz
         fi
 
         echo "========"
@@ -496,7 +495,7 @@ if [[ $COVERAGE == "true" ]]; then
             minimap2 -ax sr {1} {2} {3} "|" \
             awk -F\\t -v OFS=\\t "'{\$1=substr(\$1,1,251)}1'" \
             ">" mapped$t/{1m}.sam \
-            ::: spades/*/contigs.fasta :::+ $corrawsource1 :::+ $corrawsource2
+            ::: spades$t/*/contigs.fasta :::+ $corrawsource1 :::+ $corrawsource2
 
         echo "Sorting and indexing of sam files."
         PARALLEL --plus 'samtools sort {} > {.}.bam && samtools index {.}.bam' \
@@ -504,12 +503,12 @@ if [[ $COVERAGE == "true" ]]; then
 
         echo "Calculating depth."
         parallel --dry-run $MKDIR stats$t/{/.} ::: mapped$t/*.sam | sh
-        PARALLEL 'samtools depth -a {} | awk "{print \$3 > \"stats'$t'/{\.}/\"\$1}"' \
+        PARALLEL 'samtools depth -a {} | awk "{print \$3 > \"stats'$t'/{/.}/\"\$1}"' \
             ::: mapped$t/*.bam
 
     COVPLOT=$(cat <<-'EOF'
     set term png;
-    set output figs.'/'.sample.'_'.contig;
+    set output figs.'/'.sample.'_'.contig.'.png';
     set title sample.'-'.contig noenhanced;
     set xlabel 'bp';
     set ylabel 'coverage';
@@ -520,8 +519,8 @@ EOF
     )
 
     echo "Plotting coverage depth."
-    PARALLEL -q --rpl "$FIRSTDIRECTORY" \
-        gnuplot -e "sample='{m}'; contig='{/}'; file='{}'; figs='figs';$COVPLOT" \
+    parallel -q --rpl "$FIRSTDIRECTORY" \
+        gnuplot -e "sample='{m}'; contig='{/}'; file='{}'; figs='figs$t';$COVPLOT" \
         ::: stats$t/*/*
     done
 fi
