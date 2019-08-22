@@ -12,6 +12,7 @@ $0 [--options] "FolderPath" OR/AND "FastqFiles"
 --keep:
     This flag will make sure the inbetween results will be kept.
     This way you can resume the pipeline when it crashed unexpectedly.
+    (Currently not implemented.)
 --nocov:
     Do not plot the coverage plots.
 -i [FILE]
@@ -226,7 +227,7 @@ if [[ -z "$INPUT" ]]; then
             cat "${FILES[@]}" >> $INPUT
         fi
         if [[ ! -z "$DIRS" ]]; then
-            find "${DIRS[@]}" -type f | xargs cat >> $INPUT
+            find "${DIRS[@]}" -type f -print0 | xargs -0 cat >> $INPUT
         fi
     fi
 fi
@@ -293,11 +294,11 @@ if [[ $COVERAGE == "true" ]]; then
 
     echo "Sorting and indexing of sam files."
     PARALLEL 'samtools sort {} > {.}.bam && samtools index {.}.bam && samtools calmd {.}.bam medaka/{/.}/consensus.fasta > {.}.md.sam && samtools sort {.}.md.sam > {.}.md.bam && samtools index {.}.md.bam' \
-        ::: medaka_mapped/*.sam
+        ::: medaka_mapped/!(*.md).sam
 
     echo "Calculating depth."
     parallel --dry-run $MKDIR stats/{/.} ::: medaka_mapped/!(*.md).sam | sh
-    PARALLEL 'samtools depth -a {} | awk "{print \$3 > \"stats/{/.}/\"\$1}"' ::: medaka_mapped/!(*.md).bam
+    PARALLEL 'samtools depth -a {} | awk "{gsub(\":\",\"_\",\$1); print \$3 > \"stats/{/.}/\"\$1}"' ::: medaka_mapped/!(*.md).bam
 
     COVPLOT=$(cat <<-'EOF'
     set term png;
@@ -320,4 +321,6 @@ shopt -u extglob
 
 # Variance calling / sequence contribution?
 echo "Done"
+date
+echo "Assemblies in medaka folder"
 exit 0

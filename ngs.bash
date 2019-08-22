@@ -32,7 +32,9 @@ $0 [--options] "SOURCE1" "SOURCE2"
 EOF
 )
 
+echo "========"
 echo "Parsing arguments"
+echo "========"
 
 NOMOVE=false
 KEEP=false
@@ -105,6 +107,7 @@ if [[ -z "$SOURCE1" ]] || [[ -z "$SOURCE2" ]]; then
     exit 1
 fi
 
+echo "========"
 echo "Arguments parsed:"
 echo "SOURCE1 files: $SOURCE1"
 echo "SOURCE2 files: $SOURCE2"
@@ -132,6 +135,7 @@ program_missing () {
     >&2 echo "Provided that one of these package managers is installed."
 }
 
+echo "========"
 echo "Checking dependencies."
 echo "Checking core dependencies."
 for program in free ps printf awk perl sed; do
@@ -194,7 +198,9 @@ if [[ $COVERAGE == "true" ]]; then
     fi
 fi
 
+echo "========"
 echo "Dependencies met."
+echo "========"
 
 #########################################
 # GNU Parallel helper functions/strings #
@@ -261,12 +267,12 @@ FIRSTDIRECTORY='{m} s:.*/(?=.*/)::;s:/.*::;'
 #################
 
 # Check if glob pattern expands.
-if [[ `stat -t $SOURCE1` ]]; then
+if [[ ! `stat -t $SOURCE1` ]]; then
     >&2 echo "Glob pattern of first files not found ($SOURCE1)."
     >&2 echo "Exiting"
     exit 1
 fi
-if [[ `stat -t $SOURCE2` ]]; then
+if [[ ! `stat -t $SOURCE2` ]]; then
     >&2 echo "Glob pattern of second files not found ($SOURCE2)."
     >&2 echo "Exiting"
     exit 1
@@ -300,6 +306,7 @@ else
 fi
 
 echo "Checks done."
+echo "========"
 
 # Check if source files are on a different disk, if so,
 # it is better to move them to a folder on the local first,
@@ -315,8 +322,6 @@ if [[ $NOMOVE == "false" ]] && [[ `stat --printf '%d' $(echo $SOURCE1 | head -1)
             echo "Moving file $i"
             $CP $i raw/$(perl -pe '$WITHDIRECTORYREGEX'<<<$i)
         done
-        BASESOURCE1=$(perl -pe '$WITHDIRECTORYREGEX'<<<"$SOURCE1")
-        BASESOURCE2=$(perl -pe '$WITHDIRECTORYREGEX'<<<"$SOURCE2")
         echo "Moving done"
     else
         echo "Moving first files"
@@ -324,9 +329,15 @@ if [[ $NOMOVE == "false" ]] && [[ `stat --printf '%d' $(echo $SOURCE1 | head -1)
         echo "Moving second files"
         $CP $SOURCE2 raw
         echo "Moving done"
-        BASESOURCE1=$(sed 's:.*/::'<<<"$SOURCE1")
-        BASESOURCE2=$(sed 's:.*/::'<<<"$SOURCE2")
     fi
+fi
+
+if [[ WITHDIRECTORY == "true" ]]; then
+    BASESOURCE1=$(perl -pe '$WITHDIRECTORYREGEX'<<<"$SOURCE1")
+    BASESOURCE2=$(perl -pe '$WITHDIRECTORYREGEX'<<<"$SOURCE2")
+else
+    BASESOURCE1=$(sed 's:.*/::'<<<"$SOURCE1")
+    BASESOURCE2=$(sed 's:.*/::'<<<"$SOURCE2")
 fi
 
 ##############
@@ -334,6 +345,7 @@ fi
 ##############
 
 echo "Starting fastp"
+echo "========"
 
 # Figuring out where the raw files are
 $MKDIR fastp html json
@@ -354,17 +366,19 @@ else
 fi
 
 # Now we can run fastp in parallel
-PARALLEL --rpl "$COMMONPREFIXRAW" --rpl "$TARGET" \
-    fastp -i {1} -o fastp/{1t} -I {2} -O fastp/{2t} \
-    -5 -3 --correction -qualified_quality_phred 20 --lenght_required 30 \
-    -j json/{1cp}.json -h html/{1cp}.html --report_title {1cp} \
-    ::: $RAWSOURCE1 :::+ $RAWSOURCE2
+# PARALLEL --rpl "$COMMONPREFIXRAW" --rpl "$TARGET" \
+#     fastp -i {1} -o fastp/{1t} -I {2} -O fastp/{2t} \
+#     -5 -3 --correction --qualified_quality_phred 20 --length_required 30 \
+#     -j json/{1cp}.json -h html/{1cp}.html --report_title {1cp} \
+#     ::: $RAWSOURCE1 :::+ $RAWSOURCE2
+PDF=false
 
 echo "Finished fastp"
+echo "========"
 if [[ $PDF == "true" ]]; then
     echo "Making pdf about quality, this is the same as the HTML, just not interactive."
     $MKDIR pdf
-    PARALLEL wkhtmltopdf {} pdf/{/.} ::: html/*
+    PARALLEL wkhtmltopdf {} pdf/{/.}.pdf ::: html/*
 fi
 
 if [[ $MOVED == "true" ]] && [[ $KEEP == "false" ]]; then
@@ -373,6 +387,7 @@ if [[ $MOVED == "true" ]] && [[ $KEEP == "false" ]]; then
 fi
 
 echo "Starting SOAPNuke"
+echo "========"
 
 $MKDIR soapnuke
 PARALLEL --rpl "$COMMONPREFIX" \
@@ -396,6 +411,7 @@ if [[ $PHAGE == "true" ]]; then
 fi
 
 echo "Assembly"
+echo "========"
 phage_suffix="_phage"
 bac_suffix="_bac"
 
@@ -418,10 +434,10 @@ for t in $targets; do
         corrawsource2=soapnuke/*/$BASESOURCE2.gz
     fi
 
-    echo "Running spades.py for $1."
+    echo "Running spades.py for $t."
     $MKDIR spades$t
     PARALLEL --rpl "$COMMONPREFIX" \
-        $MKDIR spades$t/{1cp} "&&" \
+        mkdir -p spades$t/{1cp} "&&" \
         spades.py -1 {1} -2 {2} --carefull -o spades$t/{1cp} \
         ::: $corrawsource1 :::+ $corrawsource2
 
@@ -470,6 +486,7 @@ if [[ $COVERAGE == "true" ]]; then
             corrawsource2=soapnuke/*/$BASESOURCE2.gz
         fi
 
+        echo "========"
         echo "Working on $t"
         $MKDIR {mapped,stats,figs}$t
 
@@ -509,5 +526,7 @@ EOF
     done
 fi
 
+echo "========"
 echo "Done"
+echo "========"
 exit 0

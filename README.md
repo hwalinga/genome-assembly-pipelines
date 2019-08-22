@@ -28,6 +28,7 @@ You still have to make sure that the you have installed the dependencies for the
 - fastp
 - spades
 - wkhtmltopdf (optional)
+- seqtk (for phage assembly)
 
 ### Oxford Nanopore Technologies (ONT)
 - qcat
