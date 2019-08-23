@@ -100,12 +100,38 @@ while [[ -n "$1" ]]; do
     shift
 done
 
+if [[ "$SOURCE1" =~ .*\ .* ]] || [[ "$SOURCE2" =~ .*\ .* ]]; then
+    if [[ "$PWD" =~ .*\ .* ]]; then  # Path contains spaces.
+        >&2 "The provided paths and the current directory contains spaces"
+        >&2 "There is no workaround I can apply here."
+        >&2 "Change the provided paths or the current directory so that"
+        >&2 "at least one of these does not contain any spaces."
+        >&2 "Exiting"
+        exit 1
+    fi
+    BASENAME1="${SOURCE1##*/}"
+    DIRNAME1="${SOURCE1%/*}"
+    BASENAME2="${SOURCE2##*/}"
+    DIRNAME2="${SOURCE%/*}"
+    if [[ "$DIRNAME1" =~ .*\*.* ]] || [[ "$DIRNAME2" =~ .*\*.* ]] || [[ "$BASENAME1" =~ .*\ .* ]] || [[ "$BASENAME2" =~ .*\ .* ]]; then
+        >&2 "Combining glob patterns with spaces is not possible."
+        >&2 "Rename or move your files."
+        >&2 "Exiting"
+        exit 1
+    fi
+    ln -s "$DIRNAME1" symlink_files_1
+    ln -s "$DIRNAME2" symlink_files_2
+    SOURCE1="symlink_files_1/$BASENAME1"
+    SOURCE2="symlink_files_2/$BASENAME2"
+fi
+
 if [[ -z "$SOURCE1" ]] || [[ -z "$SOURCE2" ]]; then
-    >&2 echo "Have not set both source files, exiting"
+    >&2 echo "Have not set both source files"
     echo "source1 is:"
     echo "$SOURCE1"
     echo "source2 is:"
     echo "$SOURCE2"
+    >&2 "Exiting"
     exit 1
 fi
 

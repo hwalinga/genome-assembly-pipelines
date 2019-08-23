@@ -89,6 +89,10 @@ For example:
 bash ngs.bash "path/to/files/*_1.fq.gz" "path/to/files/*_2.fq.gz"
 ```
 
+NB. Known bug. You can have the wildcard (\*) within a folder name, but in that case
+your folders, cannot contain any spaces. Also, having spaces in your work
+directory and source files will error out the program.
+
 ## ONT
 
 ```
