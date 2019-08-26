@@ -240,19 +240,20 @@ if [[ ! -s "$INPUT" ]]; then
 fi
 
 # demultiplex
+KIT="NBD104/NBD114"
 $MKDIR demultiplex
->&2 echo "Using kit NBD103/NBD104, change script to change."
+>&2 echo "Using kit "$KIT", change script to change."
 if [[ $TEST == "--dry-run" ]]; then
-    echo "qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle"
+    echo "qcat -f $INPUT -b demultiplex --trim -k "$KIT" --detect-middle"
 else
-    qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle
+    qcat -f $INPUT -b demultiplex --trim -k "$KIT" --detect-middle
 fi
 # filter good bar codes
 $MKDIR demultiplex_filter
 if [[ $TEST == "--dry-run" ]]; then
     echo "find demultiplex ! -name none.fastq -type f -size +1M | xarp cp -t demultiplex_filter"
 else
-    find demultiplex ! -name none.fastq -type f -size +1M | xargs cp -t demultiplex_filter
+    find demultiplex ! -name none.fastq -type f -size +150k | xargs cp -t demultiplex_filter
 fi
 
 # Filter on quality
