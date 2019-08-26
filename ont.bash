@@ -4,7 +4,7 @@
 # PARSE ARGUMENTS #
 ###################
 
-HELP=$(cat << 'EOF'
+HELP=$(cat << EOF
 Usage:
 $0 [--options] "FolderPath" OR/AND "FastqFiles"
 --test:
