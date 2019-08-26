@@ -83,6 +83,7 @@ they will not be expanded before the program can read them.
 ```
 
 For NGS you will have paired-end reads. The paths to this data must be quoted.
+(Or at least the glob pattern must be quoted.)
 For example:
 
 ```
