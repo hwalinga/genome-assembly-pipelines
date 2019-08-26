@@ -124,6 +124,9 @@ if [[ $KEEP == "true" ]]; then
     echo "Keep inbetween results."
 fi
 
+SYMLINK_FILES_1=symlink_files_1
+SYMLINK_FILES_2=symlink_files_2
+SYMLINKED=false
 # Create symlink if there are spaces in filename problems.
 echo "========"
 echo "Checking spaces in filename problems."
@@ -146,10 +149,11 @@ if [[ "$SOURCE1" =~ .*\ .* ]] || [[ "$SOURCE2" =~ .*\ .* ]]; then
         >&2 "Exiting"
         exit 1
     fi
-    ln -s "$DIRNAME1" symlink_files_1
-    ln -s "$DIRNAME2" symlink_files_2
-    SOURCE1="symlink_files_1/$BASENAME1"
-    SOURCE2="symlink_files_2/$BASENAME2"
+    ln -s "$DIRNAME1" $SYMLINK_FILES_1
+    ln -s "$DIRNAME2" $SYMLINK_FILES_2
+    SOURCE1="$SYMLINK_FILES_1/$BASENAME1"
+    SOURCE2="$SYMLINK_FILES_2/$BASENAME2"
+    SYMLINKED=true
 fi
 
 #########################
@@ -404,6 +408,15 @@ PARALLEL --rpl "$COMMONPREFIXRAW" --rpl "$TARGET" \
     ::: $RAWSOURCE1 :::+ $RAWSOURCE2
 
 echo "Finished fastp"
+echo "Unlinking if needed"
+if [[ $SYMLINKED == true ]]; then
+    if [[ -L $SYMLINK_FILES_1 ]]; then
+        unlink $SYMLINK_FILES_1
+    fi
+    if [[ -L $SYMLINK_FILES_2 ]]; then
+        unlink $SYMLINK_FILES_2
+    fi
+fi
 echo "========"
 if [[ $PDF == "true" ]]; then
     echo "Making pdf about quality, this is the same as the HTML, just not interactive."
