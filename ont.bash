@@ -28,7 +28,7 @@ $0 [--options] "FolderPath" OR/AND "FastqFiles"
     (zenity required)
     (Currently not very well implemented)
 --help,-h
-    Plot this help and exit.
+    Print this help and exit.
 EOF
 )
 
@@ -103,7 +103,7 @@ FILES=()
 DIRS=()
 if [[ "$INPUTDIR_PROMPT" == "true" ]] || [[ "$PROMPT" == "true" ]]; then
     if [[ -z "$INPUTDIR" ]]; then
-        INPUTDIR=$(zenity --file-selection --directoy)
+        INPUTDIR=$(zenity --file-selection --directory)
     fi
     DIRS+=("$INPUTDIR")
 fi

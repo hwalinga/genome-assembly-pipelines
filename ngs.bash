@@ -32,13 +32,13 @@ they will not be expanded before the program can read them.
 -d [DIR]
     You can also provide the directory with all the fastq files with this option.
     If you leave this without any argument you will be prompted (zenity required).
-    The files in this directoy must have the "*1.fq.gz" and "2.fq.gz" postfix.
+    The files in this directoy must have the "*1.fq.gz" and "2.fq.gz" suffix.
 -p
     This option will prompt you automatically for all the options
     (zenity required)
     (Currently not very well implemented)
 --help,-h
-    Plot this help and exit.
+    Print this help and exit.
 EOF
 )
 
@@ -125,7 +125,7 @@ done
 
 if [[ "$INPUTDIR_PROMPT" == "true" ]] || [[ "$PROMPT" == "true" ]]; then
     if [[ -z "$INPUTDIR" ]]; then
-        INPUTDIR=$(zenity --file-selection --directoy)
+        INPUTDIR=$(zenity --file-selection --directory)
     fi
 fi
 
@@ -140,7 +140,7 @@ if [[ -z "$SOURCE1" ]] || [[ -z "$SOURCE2" ]]; then
     echo "$SOURCE1"
     echo "source2 is:"
     echo "$SOURCE2"
-    >&2 "Exiting"
+    >&2 echo "Exiting"
     exit 1
 fi
 

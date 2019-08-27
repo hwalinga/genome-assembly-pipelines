@@ -90,8 +90,16 @@ they will not be expanded before the program can read them.
     at the moment.
 --nocov:
     Do not plot the coverage plots.
+-d [DIR]
+    You can also provide the directory with all the fastq files with this option.
+    If you leave this without any argument you will be prompted (zenity required).
+    The files in this directoy must have the "*1.fq.gz" and "2.fq.gz" suffix.
+-p
+    This option will prompt you automatically for all the options
+    (zenity required)
+    (Currently not very well implemented)
 --help,-h
-    Plot this help and exit.
+    Print this help and exit.
 ```
 
 For NGS you will have paired-end reads. The paths to this data must be quoted.
@@ -108,7 +116,7 @@ For easy use, just let the program prompt you for the directory with the fastq f
 bash ~/genome-assembly-pipelines/ont.bash -d
 ```
 
-(This will assume the files are matching the pattern '*1.fq.gz' and '2.fq.gz'.)
+(This will assume the files are matching the pattern '\*1.fq.gz' and '\*2.fq.gz'.)
 
 NB. Known bug. You can have the wildcard (\*) within a folder name, but in that case
 your folders, cannot contain any spaces. Also, having spaces in your work
@@ -131,8 +139,16 @@ ont.bash [--options] "FolderPath" OR/AND "FastqFiles"
     Instead of supplying as an argument you can pass the fastq file
     with the -i option. Note that this way the file will not be copied.
     (Copying might be desirable if it is on an unstable filesystem.)
+    If you leave this without any argument you will be prompted (zenity required).
+-d [DIR]
+    You can also provide the directory with all the fastq files with this option.
+    If you leave this without any argument you will be prompted (zenity required).
+-p
+    This option will prompt you automatically for all the options
+    (zenity required)
+    (Currently not very well implemented)
 --help,-h
-    Plot this help and exit.
+    Print this help and exit.
 ```
 
 The ONT pipeline starts with the fastq files.
@@ -153,6 +169,11 @@ bash ~/genome-assembly-pipelines/ont.bash -d
 
 ## sb-ont users
 If you are on the sb-ont machine, there are specific aliases that will help
-you making your life easier. Run showhelp and see under the section
-"assembly aliases". You can also find these and the pdf of showhelp at
+you making your life easier. Run `showhelp` and see under the section
+"aliases for assembly / bulk drive interaction". You can also find these and the pdf of showhelp at
 https://github.com/hwalinga/ont-linux-cluster-setup/
+
+## NB
+For long jobs please note that you don't have to leave your terminal open,
+but have to make use of the `screen` program, that is also explained in the
+section "running long jobs" of the `showhelp`.
