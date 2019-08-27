@@ -19,8 +19,16 @@ $0 [--options] "FolderPath" OR/AND "FastqFiles"
     Instead of supplying as an argument you can pass the fastq file
     with the -i option. Note that this way the file will not be copied.
     (Copying might be desirable if it is on an unstable filesystem.)
+    If you leave this without any argument you will be prompted (zenity required).
+-d [DIR]
+    You can also provide the directory with all the fastq files with this option.
+    If you leave this without any argument you will be prompted (zenity required).
+-p
+    This option will prompt you automatically for all the options
+    (zenity required)
+    (Currently not very well implemented)
 --help,-h
-    Plot this help and exit.
+    Print this help and exit.
 EOF
 )
 
@@ -32,7 +40,12 @@ KEEP=false
 TEST=""
 COVERAGE=true
 ERRORLOG="error.log"
-INPUT=""
+INPUTFILE=""
+INPUTFILE_PROMPT=false
+INPUTDIR=""
+INPUTDIR_PROMPT=false
+PROMPT=false
+
 
 while [[ -n "$1" ]] && [[ "$1" =~ ^- ]]; do
     case "$1" in
@@ -48,15 +61,31 @@ while [[ -n "$1" ]] && [[ "$1" =~ ^- ]]; do
         --nocov)
             COVERAGE=false
             ;;
+        -i)
+            shift
+            INPUTFILE_PROMPT=true
+            if [[ ! "$1" =~ ^- ]]; then
+                INPUTFILE="$1"
+                shift
+            fi
+            ;;
+        -d)
+            shift
+            INPUTDIR_PROMPT=true
+            if [[ ! "$1" =~ ^- ]]; then
+                INPUTDIR="$1"
+                shift
+            fi
+            ;;
+        -p)
+            shift
+            PROMPT=true
+            ;;
         -h|--help)
             >&2 echo "Printing help:"
             echo "$HELP"
             >&2 echo "Exiting"
             exit 1
-            ;;
-        -i)
-            shift
-            INPUT="$1"
             ;;
         --)
             break
@@ -72,6 +101,13 @@ done
 
 FILES=()
 DIRS=()
+if [[ "$INPUTDIR_PROMPT" == "true" ]] || [[ "$PROMPT" == "true" ]]; then
+    if [[ -z "$INPUTDIR" ]]; then
+        INPUTDIR=$(zenity --file-selection --directory)
+    fi
+    DIRS+=("$INPUTDIR")
+fi
+
 for i in "$@"; do
     if [[ -f "$i" ]]; then
         FILES+=("$i")
@@ -213,9 +249,14 @@ FIRSTDIRECTORY='{m} s:.*/(?=.*/)::;s:/.*::;'
 
 # TODO: Remove inbetween results.
 
-echo "$INPUT"
-if [[ -z "$INPUT" ]]; then
-    INPUT=ont.fastq
+echo "$INPUTFILE"
+if [[ -z "$INPUTFILE" ]]; then
+    if [[ "$INPUTFILE_PROMPT" == "true" ]]; then
+        INPUTFILE=$(zenity --file-selection)
+    else
+        INPUTFILE=ont.fastq
+    fi
+
     if [[ $TEST == "--dry-run" ]]; then
         echo "FILES"
         echo "${FILES[@]}"
@@ -224,35 +265,36 @@ if [[ -z "$INPUT" ]]; then
     else
         echo "We are collecting the fastq files"
         if [[ ! -z "$FILES" ]]; then
-            cat "${FILES[@]}" >> $INPUT
+            cat "${FILES[@]}" >> $INPUTFILE
         fi
         if [[ ! -z "$DIRS" ]]; then
-            find "${DIRS[@]}" -type f -print0 | xargs -0 cat >> $INPUT
+            find "${DIRS[@]}" -type f -print0 | xargs -0 cat >> $INPUTFILE
         fi
     fi
 fi
 
-if [[ ! -s "$INPUT" ]]; then
-    rm -f "$INPUT"
+if [[ ! -s "$INPUTFILE" ]]; then
+    rm -f "$INPUTFILE"
     >&2 echo "Could not find any fastq reads in the input arguments you provided."
     >&2 echo "Exiting"
     exit 1
 fi
 
 # demultiplex
+KIT="NBD104/NBD114"
 $MKDIR demultiplex
->&2 echo "Using kit NBD103/NBD104, change script to change."
+>&2 echo "Using kit "$KIT", change script to change."
 if [[ $TEST == "--dry-run" ]]; then
-    echo "qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle"
+    echo "qcat -f $INPUTFILE -b demultiplex --trim -k "$KIT" --detect-middle"
 else
-    qcat -f $INPUT -b demultiplex --trim -k NBD103/NBD104 --detect-middle
+    qcat -f $INPUTFILE -b demultiplex --trim -k "$KIT" --detect-middle
 fi
 # filter good bar codes
 $MKDIR demultiplex_filter
 if [[ $TEST == "--dry-run" ]]; then
     echo "find demultiplex ! -name none.fastq -type f -size +1M | xarp cp -t demultiplex_filter"
 else
-    find demultiplex ! -name none.fastq -type f -size +1M | xargs cp -t demultiplex_filter
+    find demultiplex ! -name none.fastq -type f -size +150k | xargs cp -t demultiplex_filter
 fi
 
 # Filter on quality

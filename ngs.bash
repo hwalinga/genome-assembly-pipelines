@@ -29,8 +29,16 @@ they will not be expanded before the program can read them.
     at the moment.
 --nocov:
     Do not plot the coverage plots.
+-d [DIR]
+    You can also provide the directory with all the fastq files with this option.
+    If you leave this without any argument you will be prompted (zenity required).
+    The files in this directoy must have the "*1.fq.gz" and "2.fq.gz" suffix.
+-p
+    This option will prompt you automatically for all the options
+    (zenity required)
+    (Currently not very well implemented)
 --help,-h
-    Plot this help and exit.
+    Print this help and exit.
 EOF
 )
 
@@ -46,6 +54,9 @@ TEST=""
 COVERAGE=true
 PDF=true
 ERRORLOG="error.log"
+INPUTDIR=""
+INPUTDIR_PROMPT=false
+PROMPT=false
 
 while [[ -n "$1" ]]; do
     case "$1" in
@@ -72,6 +83,18 @@ while [[ -n "$1" ]]; do
             ;;
         --nocov)
             COVERAGE=false
+            ;;
+        -d)
+            shift
+            INPUTDIR_PROMPT=true
+            if [[ ! "$1" =~ ^- ]]; then
+                INPUTDIR="$1"
+                shift
+            fi
+            ;;
+        -p)
+            shift
+            PROMPT=true
             ;;
         -h|--help)
             >&2 echo "Printing help:"
@@ -100,29 +123,15 @@ while [[ -n "$1" ]]; do
     shift
 done
 
-if [[ "$SOURCE1" =~ .*\ .* ]] || [[ "$SOURCE2" =~ .*\ .* ]]; then
-    if [[ "$PWD" =~ .*\ .* ]]; then  # Path contains spaces.
-        >&2 "The provided paths and the current directory contains spaces"
-        >&2 "There is no workaround I can apply here."
-        >&2 "Change the provided paths or the current directory so that"
-        >&2 "at least one of these does not contain any spaces."
-        >&2 "Exiting"
-        exit 1
+if [[ "$INPUTDIR_PROMPT" == "true" ]] || [[ "$PROMPT" == "true" ]]; then
+    if [[ -z "$INPUTDIR" ]]; then
+        INPUTDIR=$(zenity --file-selection --directory)
     fi
-    BASENAME1="${SOURCE1##*/}"
-    DIRNAME1="${SOURCE1%/*}"
-    BASENAME2="${SOURCE2##*/}"
-    DIRNAME2="${SOURCE%/*}"
-    if [[ "$DIRNAME1" =~ .*\*.* ]] || [[ "$DIRNAME2" =~ .*\*.* ]] || [[ "$BASENAME1" =~ .*\ .* ]] || [[ "$BASENAME2" =~ .*\ .* ]]; then
-        >&2 "Combining glob patterns with spaces is not possible."
-        >&2 "Rename or move your files."
-        >&2 "Exiting"
-        exit 1
-    fi
-    ln -s "$DIRNAME1" symlink_files_1
-    ln -s "$DIRNAME2" symlink_files_2
-    SOURCE1="symlink_files_1/$BASENAME1"
-    SOURCE2="symlink_files_2/$BASENAME2"
+fi
+
+if [[ ! -z "$INPUTDIR" ]]; then
+    SOURCE1="$INPUTDIR/*1.fq.gz"
+    SOURCE2="$INPUTDIR/*2.fq.gz"
 fi
 
 if [[ -z "$SOURCE1" ]] || [[ -z "$SOURCE2" ]]; then
@@ -131,7 +140,7 @@ if [[ -z "$SOURCE1" ]] || [[ -z "$SOURCE2" ]]; then
     echo "$SOURCE1"
     echo "source2 is:"
     echo "$SOURCE2"
-    >&2 "Exiting"
+    >&2 echo "Exiting"
     exit 1
 fi
 
@@ -147,6 +156,38 @@ if [[ $TEST == "--dry-run" ]]; then
 fi
 if [[ $KEEP == "true" ]]; then
     echo "Keep inbetween results."
+fi
+
+SYMLINK_FILES_1=symlink_files_1
+SYMLINK_FILES_2=symlink_files_2
+SYMLINKED=false
+# Create symlink if there are spaces in filename problems.
+echo "========"
+echo "Checking spaces in filename problems."
+if [[ "$SOURCE1" =~ .*\ .* ]] || [[ "$SOURCE2" =~ .*\ .* ]]; then
+    if [[ "$PWD" =~ .*\ .* ]]; then  # Path contains spaces.
+        >&2 "The provided paths and the current directory contains spaces"
+        >&2 "There is no workaround I can apply here."
+        >&2 "Change the provided paths or the current directory so that"
+        >&2 "at least one of these does not contain any spaces."
+        >&2 "Exiting"
+        exit 1
+    fi
+    BASENAME1="${SOURCE1##*/}"
+    DIRNAME1="${SOURCE1%/*}"
+    BASENAME2="${SOURCE2##*/}"
+    DIRNAME2="${SOURCE2%/*}"
+    if [[ "$DIRNAME1" =~ .*\*.* ]] || [[ "$DIRNAME2" =~ .*\*.* ]] || [[ "$BASENAME1" =~ .*\ .* ]] || [[ "$BASENAME2" =~ .*\ .* ]]; then
+        >&2 "Combining glob patterns with spaces is not possible."
+        >&2 "Rename or move your files."
+        >&2 "Exiting"
+        exit 1
+    fi
+    ln -s "$DIRNAME1" $SYMLINK_FILES_1
+    ln -s "$DIRNAME2" $SYMLINK_FILES_2
+    SOURCE1="$SYMLINK_FILES_1/$BASENAME1"
+    SOURCE2="$SYMLINK_FILES_2/$BASENAME2"
+    SYMLINKED=true
 fi
 
 #########################
@@ -342,21 +383,21 @@ echo "========"
 MOVED=false
 if [[ $NOMOVE == "false" ]] && [[ `stat --printf '%d' $(echo $SOURCE1 | head -1)` -ne `stat --printf '%d' ./` ]]; then
     MOVED=true
-    echo "Moving files from remote to local 'raw'"
+    echo "Copying files from remote to local 'raw'"
     $MKDIR raw
     if [[ WITHDIRECTORY == "true" ]]; then
-        echo "Moving files"
+        echo "Copying files"
         for i in $SOURCE1 $SOURCE2; do
-            echo "Moving file $i"
+            echo "Copying file $i"
             $CP $i raw/$(perl -pe '$WITHDIRECTORYREGEX'<<<$i)
         done
-        echo "Moving done"
+        echo "Copying done"
     else
-        echo "Moving first files"
+        echo "Copying first files"
         $CP $SOURCE1 raw
-        echo "Moving second files"
+        echo "Copying second files"
         $CP $SOURCE2 raw
-        echo "Moving done"
+        echo "Copying done"
     fi
 fi
 
@@ -401,6 +442,15 @@ PARALLEL --rpl "$COMMONPREFIXRAW" --rpl "$TARGET" \
     ::: $RAWSOURCE1 :::+ $RAWSOURCE2
 
 echo "Finished fastp"
+echo "Unlinking if needed"
+if [[ $SYMLINKED == true ]]; then
+    if [[ -L $SYMLINK_FILES_1 ]]; then
+        unlink $SYMLINK_FILES_1
+    fi
+    if [[ -L $SYMLINK_FILES_2 ]]; then
+        unlink $SYMLINK_FILES_2
+    fi
+fi
 echo "========"
 if [[ $PDF == "true" ]]; then
     echo "Making pdf about quality, this is the same as the HTML, just not interactive."
