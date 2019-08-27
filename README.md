@@ -7,7 +7,15 @@ It might have been a better idea to write them in a workflow management system
 like Snakemake or Nextflow.
 
 # Installation
-Installation is simple: Clone this folder `git clone https://github.com/hwalinga/genome-assembly-pipelines`. Or `wget` the specific file you want with for example `https://raw.githubusercontent.com/hwalinga/genome-assembly-pipelines/master/ngs.bash`. Running the program is simple, just use `bash path/to/pipeline.bash`.
+Installation is simple: Clone this folder, you can just have this in your homefolder.
+```
+cd  # Go to the home folder.
+git clone https://github.com/hwalinga/genome-assembly-pipelines  # Clone this directory.
+```
+
+Or `wget` the specific file you want with for example `https://raw.githubusercontent.com/hwalinga/genome-assembly-pipelines/master/ngs.bash`.
+
+Running the program is simple, just use `bash path/to/pipeline.bash`.
 
 (For advanced usage you can make the scripts available with the `$PATH` variable
 and `chmod +x` them.)
@@ -45,11 +53,15 @@ You still have to make sure that the you have installed the dependencies for the
 * samtools (Verion >= 1.0)
 * minimap2
 
+### Misc.
+* zenity (For the interactive use)
+
 # Usage
 
 For both pipelines applies: Make a workspace where you output will end up with,
 and run `bash path/to/pipeline.bash with the correct argments`, when in this
-workspace. (`bash path/to/pipeline.bash --help` can help you with how to use.)
+workspace. (`bash path/to/pipeline.bash --help` can help you with how to use,
+but the help is also printed below.)
 
 ## NGS
 
@@ -87,8 +99,16 @@ For NGS you will have paired-end reads. The paths to this data must be quoted.
 For example:
 
 ```
-bash ngs.bash "path/to/files/*_1.fq.gz" "path/to/files/*_2.fq.gz"
+bash ~/genome-assembly-pipelines/ngs.bash "path/to/files/*_1.fq.gz" "path/to/files/*_2.fq.gz"
 ```
+
+For easy use, just let the program prompt you for the directory with the fastq files.
+
+```
+bash ~/genome-assembly-pipelines/ont.bash -d
+```
+
+(This will assume the files are matching the pattern '*1.fq.gz' and '2.fq.gz'.)
 
 NB. Known bug. You can have the wildcard (\*) within a folder name, but in that case
 your folders, cannot contain any spaces. Also, having spaces in your work
@@ -122,5 +142,17 @@ fastq files as arguments.
 For example:
 
 ```
-bash ont.bash /path/to/fastq/files/fastq_pass/
+bash ~/genome-assembly-pipelines/ont.bash /path/to/fastq/files/fastq_pass/
 ```
+
+For easy use, just let the program prompt you for the directory with the fastq files.
+
+```
+bash ~/genome-assembly-pipelines/ont.bash -d
+```
+
+## sb-ont users
+If you are on the sb-ont machine, there are specific aliases that will help
+you making your life easier. Run showhelp and see under the section
+"assembly aliases". You can also find these and the pdf of showhelp at
+https://github.com/hwalinga/ont-linux-cluster-setup/

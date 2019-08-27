@@ -29,6 +29,14 @@ they will not be expanded before the program can read them.
     at the moment.
 --nocov:
     Do not plot the coverage plots.
+-d [DIR]
+    You can also provide the directory with all the fastq files with this option.
+    If you leave this without any argument you will be prompted (zenity required).
+    The files in this directoy must have the "*1.fq.gz" and "2.fq.gz" postfix.
+-p
+    This option will prompt you automatically for all the options
+    (zenity required)
+    (Currently not very well implemented)
 --help,-h
     Plot this help and exit.
 EOF
@@ -46,6 +54,9 @@ TEST=""
 COVERAGE=true
 PDF=true
 ERRORLOG="error.log"
+INPUTDIR=""
+INPUTDIR_PROMPT=false
+PROMPT=false
 
 while [[ -n "$1" ]]; do
     case "$1" in
@@ -73,6 +84,18 @@ while [[ -n "$1" ]]; do
         --nocov)
             COVERAGE=false
             ;;
+        -d)
+            shift
+            INPUTDIR_PROMPT=true
+            if [[ ! "$1" =~ ^- ]]; then
+                INPUTDIR="$1"
+                shift
+            fi
+            ;;
+        -p)
+            shift
+            PROMPT=true
+            ;;
         -h|--help)
             >&2 echo "Printing help:"
             echo "$HELP"
@@ -99,6 +122,17 @@ while [[ -n "$1" ]]; do
     esac
     shift
 done
+
+if [[ "$INPUTDIR_PROMPT" == "true" ]] || [[ "$PROMPT" == "true" ]]; then
+    if [[ -z "$INPUTDIR" ]]; then
+        INPUTDIR=$(zenity --file-selection --directoy)
+    fi
+fi
+
+if [[ ! -z "$INPUTDIR" ]]; then
+    SOURCE1="$INPUTDIR/*1.fq.gz"
+    SOURCE2="$INPUTDIR/*2.fq.gz"
+fi
 
 if [[ -z "$SOURCE1" ]] || [[ -z "$SOURCE2" ]]; then
     >&2 echo "Have not set both source files"
