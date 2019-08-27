@@ -1,4 +1,3 @@
-# genome-assembly-pipelines
 Pipelines for making genome assemblies
 
 # About the pipelines
@@ -24,7 +23,7 @@ Almost all Linux computers will have a sufficient modern bash running to have no
 
 You still have to make sure that the you have installed the dependencies for the assemblying itself. You can install this with Anaconda or Homebrew. (SOAPnuke has to be installed manually)
 
-### Core (You most likely have this installed already installed)
+### Core (You most likely have this already installed)
 - free
 - ps
 - printf
@@ -64,6 +63,8 @@ workspace. (`bash path/to/pipeline.bash --help` can help you with how to use,
 but the help is also printed below.)
 
 ## NGS
+
+
 
 ```
 Usage:
@@ -134,7 +135,24 @@ for i in *; do mv "$i" "${i/ /_}"; done
 
 ## ONT
 
-```
+#### Important
+
+The ONT pipeline makes some assumptions which you might want to change
+in the script.
+
+The first and probably most important one is that you must give the correct
+kit to use for the demultiplexing. Change the line `KIT=".."` for the correct
+kit you used. Run `qcat --list-kits`, to see what are avaible.
+
+Next, the demultiplexing is only keeps on going with barcodes that have
+minimum amount of data available. You can change this in the line that states:
+`find demultiplex ! -name none.fastq -type f -size +150k ...` where the size
+the minimum size is the barcode data must contain.
+
+Last but not least, flye is optimized for a certain contig lenght. You must
+change that if you assemble something with a different length.
+The *-g* option in flye indicates the predicted contig length.
+
 Usage:
 ont.bash [--options] "FolderPath" OR/AND "FastqFiles"
 --test:
