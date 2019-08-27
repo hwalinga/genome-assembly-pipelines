@@ -89,9 +89,18 @@ For example:
 bash ngs.bash "path/to/files/*_1.fq.gz" "path/to/files/*_2.fq.gz"
 ```
 
-NB. Known bug. You can have the wildcard (\*) within a folder name, but in that case
-your folders, cannot contain any spaces. Also, having spaces in your work
+NB. Known bug 1. You can have the wildcard (\*) within a folder name, but in that case
+your folders, cannot contain any spaces.
+
+NB. Known bug 2. Also, having spaces in your work
 directory and source files will error out the program.
+
+NB. Known bug3. You can also not combine spaces in the basename of the file with globs.
+
+(You can replace spaces with underscores with for example:)
+```
+for i in *; do mv "$i" "${i/ /_}"; done
+```
 
 ## ONT
 
