@@ -12,7 +12,11 @@ $0 [--options] "FolderPath" OR/AND "FastqFiles"
 --keep:
     This flag will make sure the inbetween results will be kept.
     This way you can resume the pipeline when it crashed unexpectedly.
-    (Currently not implemented.)
+    (NB. Currently --keep is not implemented.)
+    But you can rerun the script and it will run from the last result.
+    However, it will also run if that result is incomplete. So if you know
+    that there was a crash in the last result, it might be best to remove this
+    folder so that is the first result.
 --nocov:
     Do not plot the coverage plots.
 -i [FILE]
@@ -214,7 +218,9 @@ CALCFREEMEM () {
 PARALLEL () {
     # PARALLEL (as the/this function) should work equivalent as parallel (as the command)
     # Calculating free processors and free memory at call time.
-    # However, I am not a 100 % percent sure, as using parallel often encounters
+    #
+    # However, I am not a 100 % percent sure on the compatibility thing,
+    # as using parallel often encounters
     # complicated quoting rules, and I don't know if bash correctly solves them like this.
     #
     # If the first argument matches -j*, than the number after -j is taken as
@@ -229,93 +235,149 @@ PARALLEL () {
     fi
     MEM="$(printf '%.f' $(bc -l <<<"$(CALCFREEMEM) / $PROC"))G"
     PROC=$(printf '%.f' $PROC)
+    echo "# RUNNING PARALLEL $TEST"
+    if [[ "$TEST" != "--dry-run" ]]; then
+        PARALLEL_INPUT="--delay 30"
+    else
+        PARALLEL_INPUT=$TEST
+    fi
 
-    parallel --plus $TEST -j $PROC --memfree $MEM --load 100% --delay 30 "$@"
+    parallel --plus $PARALLEL_INPUT -j $PROC --memfree $MEM --load 100% "$@"
 }
+
+# GNU Parallel --rpl strings.
+# Perl regex to find the first directory:
+FIRSTDIRECTORY='{m} s:.*/(?=.*/)::;s:/.*::;'
+
 if [[ $TEST == "--dry-run" ]]; then
-    MKDIR="echo mkdir -p"
-    CP="echo cp"
+    MKDIR="echo -e # DRYRUN\nmkdir -p"
+    CP="echo -e # DRYRUN\ncp"
     KEEP=true
 else
     MKDIR="mkdir -p"
     CP="cp"
 fi
 
-# GNU Parallel --rpl strings.
-# Perl regex to find the first directory:
-FIRSTDIRECTORY='{m} s:.*/(?=.*/)::;s:/.*::;'
+# Setting results folders
 
-# MOVE
+FINDFOLDER() {
+    for folder in "$@"; do
+        if [[ -d "$folder" ]]; then
+            return 1
+        fi
+    done
+}
+
+set -- dummy_folder demultiplex demultiplex_filter nanofilt filtlong flye racon0
 
 # TODO: Remove inbetween results.
 
-echo "$INPUTFILE"
-if [[ -z "$INPUTFILE" ]]; then
-    if [[ "$INPUTFILE_PROMPT" == "true" ]]; then
-        INPUTFILE=$(zenity --file-selection)
-    else
-        INPUTFILE=ont.fastq
+shift
+FINDFOLDER "$@"
+if [[ $? == 0 ]]; then  # Did not find any results folder
+
+    # MOVE
+    echo "$INPUTFILE"
+    if [[ -z "$INPUTFILE" ]]; then
+        if [[ "$INPUTFILE_PROMPT" == "true" ]]; then
+            INPUTFILE=$(zenity --file-selection)
+        else
+            INPUTFILE=ont.fastq
+        fi
+
+        if [[ $TEST == "--dry-run" ]]; then
+            echo "FILES"
+            echo "${FILES[@]}"
+            echo "DIRS"
+            echo "${DIRS[@]}"
+        else
+            echo "We are collecting the fastq files"
+            if [[ ! -z "$FILES" ]]; then
+                cat "${FILES[@]}" >> $INPUTFILE
+            fi
+            if [[ ! -z "$DIRS" ]]; then
+                find "${DIRS[@]}" -type f -print0 | xargs -0 cat >> $INPUTFILE
+            fi
+        fi
     fi
 
+    if [[ ! -s "$INPUTFILE" ]]; then
+        rm -f "$INPUTFILE"
+        >&2 echo "Unable to find any fastq reads in the input arguments"
+        >&2 echo "Exiting"
+        exit 1
+    fi
+
+    # demultiplex
+    KIT="NBD104/NBD114"
+
+    $MKDIR demultiplex
+    >&2 echo "Using kit "$KIT", change script to change."
     if [[ $TEST == "--dry-run" ]]; then
-        echo "FILES"
-        echo "${FILES[@]}"
-        echo "DIRS"
-        echo "${DIRS[@]}"
+        echo "qcat -f $INPUTFILE -b demultiplex --trim -k "$KIT" --detect-middle"
     else
-        echo "We are collecting the fastq files"
-        if [[ ! -z "$FILES" ]]; then
-            cat "${FILES[@]}" >> $INPUTFILE
-        fi
-        if [[ ! -z "$DIRS" ]]; then
-            find "${DIRS[@]}" -type f -print0 | xargs -0 cat >> $INPUTFILE
-        fi
+        qcat -f $INPUTFILE -b demultiplex --trim -k "$KIT" --detect-middle
     fi
 fi
 
-if [[ ! -s "$INPUTFILE" ]]; then
-    rm -f "$INPUTFILE"
-    >&2 echo "Could not find any fastq reads in the input arguments you provided."
-    >&2 echo "Exiting"
-    exit 1
+shift
+FINDFOLDER "$@"
+if [[ $? == 0 ]]; then  # Did not find any results folder
+
+    # filter good bar codes
+    $MKDIR demultiplex_filter
+    if [[ $TEST == "--dry-run" ]]; then
+        echo "# DRYRUN"
+        echo "find demultiplex ! -name none.fastq -type f -size +1M | xargs cp -t demultiplex_filter"
+    else
+        find demultiplex ! -name none.fastq -type f -size +150k | xargs cp -t demultiplex_filter
+    fi
 fi
 
-# demultiplex
-KIT="NBD104/NBD114"
-$MKDIR demultiplex
->&2 echo "Using kit "$KIT", change script to change."
-if [[ $TEST == "--dry-run" ]]; then
-    echo "qcat -f $INPUTFILE -b demultiplex --trim -k "$KIT" --detect-middle"
-else
-    qcat -f $INPUTFILE -b demultiplex --trim -k "$KIT" --detect-middle
-fi
-# filter good bar codes
-$MKDIR demultiplex_filter
-if [[ $TEST == "--dry-run" ]]; then
-    echo "find demultiplex ! -name none.fastq -type f -size +1M | xarp cp -t demultiplex_filter"
-else
-    find demultiplex ! -name none.fastq -type f -size +150k | xargs cp -t demultiplex_filter
-fi
 
 # Filter on quality
-$MKDIR nanofilt
-PARALLEL NanoFilt -q 7 -l 500 {} ">" nanofilt/{/} ::: demultiplex_filter/*
-$MKDIR filtlong
-PARALLEL filtlong -t 500000000 {} ">" filtlong/{/} ::: nanofilt/*
 
-# assemble
-$MKDIR flye
->&2 echo "Assembling for phage target length (40k bp)."
-PARALLEL -j1 flye -g 40k -m 3000 -i 4 --meta -t 8 --nano-raw {} -o flye/{/.} ::: filtlong/*
+shift
+FINDFOLDER "$@"
+if [[ $? == 0 ]]; then  # Did not find any results folder
 
-# polishing
-$MKDIR racon{0..4}
-$MKDIR mapped{0..3}
-parallel --dry-run cp {}/assembly.fasta racon0/{/}.fa ::: flye/* | sh
-PARALLEL \
-    "for i in {0..3}; do minimap2 -ax map-ont racon\$i/{/.}.fa filtlong/{/.}.fastq > mapped\$i/{/.}.sam && racon -t 4 -m 8 -x -6 -g -8 -w 500 filtlong/{/.}.fastq mapped\$i/{/.}.sam racon\$i/{/.}.fa > racon\$((i+1))/{/.}.fa; done" ::: racon0/*
->&2 echo "Assuming r941_flip235 base call model."
-PARALLEL -j2 medaka_consensus -i filtlong/{/.}.fastq -d {} -o medaka/{/.} -t 4 -m r941_flip235 ::: racon4/*
+    $MKDIR nanofilt
+    PARALLEL NanoFilt -q 7 -l 500 {} ">" nanofilt/{/} ::: demultiplex_filter/*
+fi
+
+shift
+FINDFOLDER "$@"
+if [[ $? == 0 ]]; then  # Did not find any results folder
+
+    $MKDIR filtlong
+    PARALLEL filtlong -t 500000000 {} ">" filtlong/{/} ::: nanofilt/*
+fi
+
+shift
+FINDFOLDER "$@"
+if [[ $? == 0 ]]; then  # Did not find any results folder
+
+    # assemble
+    $MKDIR flye
+    >&2 echo "Assembling for phage target length (40k bp)."
+    PARALLEL -j1 flye -g 40k -m 3000 -i 4 --meta -t 8 --nano-raw {} -o flye/{/.} ::: filtlong/*
+fi
+
+
+
+shift
+FINDFOLDER "$@"
+if [[ $? == 0 ]]; then  # Did not find any results folder
+
+    # polishing
+    $MKDIR racon{0..4}
+    $MKDIR mapped{0..3}
+    parallel --dry-run cp {}/assembly.fasta racon0/{/}.fa ::: flye/* | sh
+    PARALLEL \
+        "for i in {0..3}; do minimap2 -ax map-ont racon\$i/{/.}.fa filtlong/{/.}.fastq > mapped\$i/{/.}.sam && racon -t 4 -m 8 -x -6 -g -8 -w 500 filtlong/{/.}.fastq mapped\$i/{/.}.sam racon\$i/{/.}.fa > racon\$((i+1))/{/.}.fa; done" ::: racon0/*
+    >&2 echo "Assuming r941_flip235 base call model."
+    PARALLEL -j2 medaka_consensus -i filtlong/{/.}.fastq -d {} -o medaka/{/.} -t 4 -m r941_flip235 ::: racon4/*
+fi
 
 
 shopt -s extglob
@@ -336,7 +398,7 @@ if [[ $COVERAGE == "true" ]]; then
 
     echo "Sorting and indexing of sam files."
     PARALLEL 'samtools sort {} > {.}.bam && samtools index {.}.bam && samtools calmd {.}.bam medaka/{/.}/consensus.fasta > {.}.md.sam && samtools sort {.}.md.sam > {.}.md.bam && samtools index {.}.md.bam' \
-        ::: medaka_mapped/!(*.md).sam
+        ::: medaka_mapped/!(*.md).sam  # Ignore shellcheck: Negative glob
 
     echo "Calculating depth."
     parallel --dry-run $MKDIR stats/{/.} ::: medaka_mapped/!(*.md).sam | sh

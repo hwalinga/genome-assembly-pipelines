@@ -1,5 +1,13 @@
 Pipelines for making genome assemblies
 
+# Updates
+
+#### Update 30 Nov
+
+You can now restart the ont pipeline and it will continue where it left off.
+It will however continue after the last created folder. So if you know
+there was a crash in the last folder. Just `rm -rf` that folder.
+
 # About the pipelines
 These pipelines are written in pure bash, that has advantages and disadvanteges.
 It might have been a better idea to write them in a workflow management system
@@ -120,14 +128,14 @@ bash ~/genome-assembly-pipelines/ont.bash -d
 (This will assume the files are matching the pattern '\*1.fq.gz' and '\*2.fq.gz'.)
 
 NB. Known bug 1. You can have the wildcard (\*) within a folder name, but in that case
-your folders, cannot contain any spaces.
+your folders cannot contain any spaces.
 
 NB. Known bug 2. Also, having spaces in your work
 directory and source files will error out the program.
 
-NB. Known bug3. You can also not combine spaces in the basename of the file with globs.
+NB. Known bug 3. You can also not combine spaces in the basename of the file with globs.
 
-(You can replace spaces with underscores with for example:)
+(As you realise, spaces are annoying. You can replace spaces with underscores with for example:)
 
 ```
 for i in *; do mv "$i" "${i/ /_}"; done
@@ -160,7 +168,11 @@ ont.bash [--options] "FolderPath" OR/AND "FastqFiles"
 --keep:
     This flag will make sure the inbetween results will be kept.
     This way you can resume the pipeline when it crashed unexpectedly.
-    (Currently not implemented.)
+    (NB. Currently --keep is not implemented.)
+    But you can rerun the script and it will run from the last result.
+    However, it will also run if that result is incomplete. So if you know
+    that there was a crash in the last result, it might be best to remove this
+    folder so that is the first result.
 --nocov:
     Do not plot the coverage plots.
 -i [FILE]
