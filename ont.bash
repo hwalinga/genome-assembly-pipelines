@@ -268,7 +268,7 @@ FINDFOLDER() {
     done
 }
 
-set -- dummy_folder demultiplex demultiplex_filter nanofilt filtlong flye racon0
+set -- folder_order demultiplex demultiplex_filter nanofilt filtlong flye racon0
 
 # TODO: Remove inbetween results.
 
